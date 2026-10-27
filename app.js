@@ -216,6 +216,7 @@ function switchTab(tab, dir = 0, plain = false) {
   const inMais = ['relatorios', 'saldos', 'config'].includes(tab);
   $('navMais').className = 'flex flex-col items-center gap-1 transition-all duration-200 ' + (inMais ? 'text-electric-400 font-medium scale-105' : 'text-slate-400 hover:text-slate-200');
   $('moreSheet').classList.add('hidden');
+  $('chatBar').classList.toggle('hidden', tab !== 'chat');
   if (tab === 'chat') { renderHome(); fitChat(); }
   if (tab === 'relatorios') renderRelatorios();
   if (tab === 'cartoes') renderCartoes();
@@ -1340,11 +1341,14 @@ function startLock() {
 
 // ---------- Ajusta a altura do chat à tela real do celular ----------
 function fitChat() {
-  const p = $('tabChat'), hd = document.querySelector('header'), nv = document.querySelector('nav'), al = $('alertBox');
-  if (!p || !hd || !nv) return;
+  const p = $('tabChat'), bar = $('chatBar'), hd = document.querySelector('header'), nv = document.querySelector('nav'), al = $('alertBox');
+  if (!p || !bar || !hd || !nv) return;
+  bar.style.bottom = nv.offsetHeight + 'px'; // barra de digitação logo acima do menu
   const alertH = al && al.offsetHeight ? al.offsetHeight + 12 : 0;
-  const h = window.innerHeight - hd.offsetHeight - nv.offsetHeight - alertH - 16 - 12;
-  p.style.height = Math.max(300, h) + 'px';
+  const barH = bar.offsetHeight || 100;
+  const h = window.innerHeight - hd.offsetHeight - nv.offsetHeight - barH - alertH - 16 - 8;
+  p.style.flex = '0 0 auto';
+  p.style.height = Math.max(200, h) + 'px';
 }
 window.addEventListener('resize', fitChat);
 window.addEventListener('orientationchange', fitChat);

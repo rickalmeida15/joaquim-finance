@@ -22,7 +22,7 @@
     }
   </script>
 </head>
-<body class="bg-dark-bg text-slate-100 min-h-screen flex flex-col font-sans antialiased">
+<body class="bg-dark-bg text-slate-100 min-h-[100dvh] flex flex-col font-sans antialiased">
 
   <header class="bg-dark-card border-b border-dark-border px-4 py-3 sticky top-0 z-50 shadow-md">
     <div class="max-w-md mx-auto flex justify-between items-center">
@@ -44,7 +44,7 @@
     <div id="alertBox" class="space-y-2 mb-3 empty:hidden shrink-0"></div>
 
     <!-- CHAT (Estrutura com caixa de input fixa no fundo) -->
-    <div id="tabChat" class="tab-pane flex-1 flex flex-col justify-between h-[calc(100dvh-190px)] overflow-hidden">
+    <div id="tabChat" class="tab-pane flex flex-col justify-between h-[calc(100dvh-190px)] overflow-hidden">
       
       <div id="homeSummary" class="shrink-0 space-y-2 mb-3"></div>
 
@@ -66,22 +66,6 @@
         </div>
       </div>
 
-      <!-- 2. Rodapé Fixo (Atalhos + Caixa de Digitação) -->
-      <div class="shrink-0 space-y-2 pt-2 bg-dark-bg border-t border-dark-border/40">
-        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-          <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider whitespace-nowrap mr-1"><i class="fa-solid fa-bolt text-yellow-400"></i> Atalhos:</span>
-          <button class="chip" onclick="applyShortcut('Café ')">☕ Café</button>
-          <button class="chip" onclick="applyShortcut('iFood ')">🍔 iFood</button>
-          <button class="chip" onclick="applyShortcut('Uber ')">🚗 Uber</button>
-          <button class="chip" onclick="applyShortcut('Mercado ')">🛒 Mercado</button>
-        </div>
-        <form id="chatForm" onsubmit="handleSendMessage(event)">
-          <div class="flex items-center gap-2 bg-dark-card border border-dark-border rounded-2xl p-2 focus-within:border-electric-500/50 shadow-lg">
-            <input type="text" id="userInput" placeholder="Converse com o Joaquim..." autocomplete="off" class="flex-1 bg-transparent border-none outline-none text-xs text-white px-3 placeholder-slate-500">
-            <button type="submit" class="w-9 h-9 bg-electric-500 hover:bg-electric-600 text-white rounded-xl flex items-center justify-center active:scale-95"><i class="fa-solid fa-paper-plane text-xs"></i></button>
-          </div>
-        </form>
-      </div>
 
     </div>
 
@@ -395,6 +379,24 @@
   </div>
 
   <!-- Bottom Navigation Reordenado -->
+  <div id="chatBar" class="fixed left-0 right-0 z-40 bg-dark-bg border-t border-dark-border/40" style="bottom:70px">
+  <div class="max-w-md mx-auto px-4 pt-2 pb-2 space-y-2">
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+          <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider whitespace-nowrap mr-1"><i class="fa-solid fa-bolt text-yellow-400"></i> Atalhos:</span>
+          <button class="chip" onclick="applyShortcut('Café ')">☕ Café</button>
+          <button class="chip" onclick="applyShortcut('iFood ')">🍔 iFood</button>
+          <button class="chip" onclick="applyShortcut('Uber ')">🚗 Uber</button>
+          <button class="chip" onclick="applyShortcut('Mercado ')">🛒 Mercado</button>
+        </div>
+        <form id="chatForm" onsubmit="handleSendMessage(event)">
+          <div class="flex items-center gap-2 bg-dark-card border border-dark-border rounded-2xl p-2 focus-within:border-electric-500/50 shadow-lg">
+            <input type="text" id="userInput" placeholder="Converse com o Joaquim..." autocomplete="off" class="flex-1 bg-transparent border-none outline-none text-xs text-white px-3 placeholder-slate-500">
+            <button type="submit" class="w-9 h-9 bg-electric-500 hover:bg-electric-600 text-white rounded-xl flex items-center justify-center active:scale-95"><i class="fa-solid fa-paper-plane text-xs"></i></button>
+          </div>
+        </form>
+  </div>
+</div>
+
   <nav class="fixed bottom-0 left-0 right-0 bg-dark-card/95 backdrop-blur-md border-t border-dark-border py-2.5 px-3 z-50">
     <div class="max-w-md mx-auto flex justify-around items-center relative">
       <button onclick="switchTab('chat')" id="navChat" class="flex flex-col items-center gap-1"><i class="fa-solid fa-house text-lg"></i><span class="text-[10px]">Início</span></button>
