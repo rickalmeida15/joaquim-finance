@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Joaquim Finance</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0a0a0c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="joaquim-logo.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { colors: {
+        electric: { 400: '#38bdf8', 500: '#2563eb', 600: '#1d4ed8', accent: '#3b82f6' },
+        dark: { bg: '#0a0a0c', card: '#121215', input: '#1a1a1e', border: '#26262e' }
+      } } }
+    }
+  </script>
+</head>
+<body class="bg-dark-bg text-slate-100 min-h-screen flex flex-col font-sans antialiased">
+
+  <header class="bg-dark-card border-b border-dark-border px-4 py-3 sticky top-0 z-50 shadow-md">
+    <div class="max-w-md mx-auto flex justify-between items-center">
+      <div class="flex flex-col items-start gap-0.5">
+        <img src="joaquim-header.png" alt="Joaquim Finance" class="h-9 w-auto">
+        <p class="text-[10px] text-electric-400 font-mono font-semibold flex items-center gap-1">
+            <i class="fa-regular fa-calendar-check"></i> <span id="clockText">Carregando...</span>
+          </p>
+      </div>
+      <div class="bg-dark-input px-3.5 py-1.5 rounded-xl border border-dark-border text-right">
+        <span class="block text-[10px] uppercase tracking-wider text-slate-400 font-bold">Gastos do mês</span>
+        <span id="headerTotal" class="text-sm font-extrabold text-electric-400">R$ 0,00</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-md w-full mx-auto p-4 flex flex-col pb-24">
+
+    <div id="alertBox" class="space-y-2 mb-3 empty:hidden shrink-0"></div>
+
+    <!-- CHAT (Estrutura com caixa de input fixa no fundo) -->
+    <div id="tabChat" class="tab-pane flex-1 flex flex-col justify-between h-[calc(100dvh-190px)] overflow-hidden">
+      
+      <div id="homeSummary" class="shrink-0 space-y-2 mb-3"></div>
+
+      <!-- 1. Lista de Mensagens que Rola (Tudo o que for enviado entra AQUI dentro) -->
+      <div id="chatMessages" class="flex-1 overflow-y-auto pr-1 text-xs space-y-3.5 pb-3">
+        <div class="flex gap-2.5 items-start">
+          <div class="w-8 h-8 rounded-xl overflow-hidden border border-electric-500/30 shrink-0 mt-0.5">
+            <img src="joaquim-logo.png" alt="Joaquim" class="w-full h-full object-cover">
+          </div>
+          <div class="bg-dark-card border border-dark-border rounded-2xl rounded-tl-none p-3.5 max-w-[88%] text-slate-200 leading-relaxed shadow-sm space-y-2">
+            <p class="font-semibold text-white">Olá! Sou o Joaquim. O que vamos lançar hoje?</p>
+            <p class="text-slate-400">Pode falar comigo assim:</p>
+            <div class="bg-dark-bg p-2.5 rounded-xl border border-dark-border/60 text-[11px] space-y-1 font-mono text-electric-400">
+              <p>• "Comprei notebook por 4.500 em 9x"</p>
+              <p>• "Almoço 45 no crédito ontem"</p>
+              <p>• "Mercado 120 no débito Itaú"</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Rodapé Fixo (Atalhos + Caixa de Digitação) -->
+      <div class="shrink-0 space-y-2 pt-2 bg-dark-bg border-t border-dark-border/40">
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+          <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider whitespace-nowrap mr-1"><i class="fa-solid fa-bolt text-yellow-400"></i> Atalhos:</span>
+          <button class="chip" onclick="applyShortcut('Café ')">☕ Café</button>
+          <button class="chip" onclick="applyShortcut('iFood ')">🍔 iFood</button>
+          <button class="chip" onclick="applyShortcut('Uber ')">🚗 Uber</button>
+          <button class="chip" onclick="applyShortcut('Mercado ')">🛒 Mercado</button>
+        </div>
+        <form id="chatForm" onsubmit="handleSendMessage(event)">
+          <div class="flex items-center gap-2 bg-dark-card border border-dark-border rounded-2xl p-2 focus-within:border-electric-500/50 shadow-lg">
+            <input type="text" id="userInput" placeholder="Converse com o Joaquim..." autocomplete="off" class="flex-1 bg-transparent border-none outline-none text-xs text-white px-3 placeholder-slate-500">
+            <button type="submit" class="w-9 h-9 bg-electric-500 hover:bg-electric-600 text-white rounded-xl flex items-center justify-center active:scale-95"><i class="fa-solid fa-paper-plane text-xs"></i></button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+
+    <!-- EXTRATO -->
+    <div id="tabExtrato" class="tab-pane hidden space-y-4">
+      <div class="glass-card p-4 rounded-3xl shadow-xl space-y-3">
+        <div class="flex justify-between items-center">
+          <div>
+            <span class="text-[10px] text-slate-400 font-medium uppercase tracking-wider block mb-1">Gastos do Mês</span>
+            <div id="extratoHeaderTotal" class="text-3xl sm:text-4xl font-semibold text-white font-inter tracking-tight leading-none">
+              R$ 0<span class="text-lg sm:text-xl font-normal text-slate-400">,00</span>
+            </div>
+          </div>
+          <div onclick="animateAndSwitchToCards()" id="headerCardStack" class="card-stack" title="Ver cartões de crédito"></div>
+        </div>
+
+        <div class="flex justify-between items-center border-t border-dark-border/30 pt-2.5">
+          <div class="flex items-center gap-1.5 text-slate-400 hover:text-white transition-all">
+            <button onclick="shiftExtrato(-1)" class="p-1 text-slate-400 hover:text-white transition-all active:scale-95">
+              <i class="fa-solid fa-chevron-left text-xs"></i>
+            </button>
+            <span id="extratoMonth" class="text-xs font-medium text-slate-300 px-0.5"></span>
+            <button onclick="shiftExtrato(1)" class="p-1 text-slate-400 hover:text-white transition-all active:scale-95">
+              <i class="fa-solid fa-chevron-right text-xs"></i>
+            </button>
+          </div>
+          <span id="extratoCount" class="text-[10px] text-slate-400 font-normal">0 lançamentos</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 bg-dark-card border border-dark-border rounded-2xl px-3 py-2 focus-within:border-electric-500/50">
+        <i class="fa-solid fa-magnifying-glass text-slate-500 text-xs"></i>
+        <input type="search" id="extratoSearch" oninput="renderExtrato()" placeholder="Buscar em todos os lançamentos..." autocomplete="off" class="flex-1 bg-transparent outline-none text-xs text-white placeholder-slate-500">
+      </div>
+
+      <div class="bg-white text-slate-900 rounded-3xl p-4 space-y-3 shadow-2xl">
+        <div class="flex justify-between items-center pb-1">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Histórico de Lançamentos</h3>
+          <i class="fa-solid fa-receipt text-slate-400 text-xs"></i>
+        </div>
+        <div id="transactionsList" class="space-y-2.5"></div>
+      </div>
+    </div>
+
+    <!-- CARTÕES -->
+    <div id="tabCartoes" class="tab-pane hidden space-y-4">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-credit-card text-electric-400"></i> Faturas dos Cartões</h2>
+        <button onclick="openCardModal()" class="text-xs bg-electric-500/20 text-electric-400 border border-electric-500/30 px-2.5 py-1 rounded-xl font-semibold hover:bg-electric-500 hover:text-white">+ Novo Cartão</button>
+      </div>
+      <div class="flex items-center justify-between">
+        <p class="text-[11px] text-slate-400">Toque no cartão para ver a fatura.</p>
+        <div class="flex items-center gap-2">
+          <button class="navbtn" onclick="shiftFatura(-1)"><i class="fa-solid fa-chevron-left text-[10px]"></i></button>
+          <span id="faturaNav" class="text-[11px] font-semibold text-white w-20 text-center"></span>
+          <button class="navbtn" onclick="shiftFatura(1)"><i class="fa-solid fa-chevron-right text-[10px]"></i></button>
+        </div>
+      </div>
+      <div id="cardsList" class="space-y-3"></div>
+    </div>
+
+    <!-- RELATÓRIOS & METAS -->
+    <div id="tabRelatorios" class="tab-pane hidden space-y-4">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-chart-pie text-electric-400"></i> Relatórios & Metas</h2>
+        <div class="flex items-center gap-2">
+          <button class="navbtn" onclick="shiftRelatorio(-1)"><i class="fa-solid fa-chevron-left text-[10px]"></i></button>
+          <span id="relatorioMonth" class="text-xs font-semibold text-white w-20 text-center"></span>
+          <button class="navbtn" onclick="shiftRelatorio(1)"><i class="fa-solid fa-chevron-right text-[10px]"></i></button>
+        </div>
+      </div>
+
+      <div id="joaquimInsights" class="bg-dark-card border border-electric-500/30 p-3.5 rounded-2xl space-y-2 shadow-md"></div>
+
+      <div class="bg-dark-card border border-dark-border p-4 rounded-2xl shadow-md space-y-3">
+        <div class="flex justify-between items-center gap-2">
+          <h3 class="text-xs font-bold text-white flex items-center gap-2"><i class="fa-solid fa-calendar-days text-electric-400"></i> Já comprometido à frente</h3>
+          <div class="flex items-center gap-1.5">
+            <button id="fcPrev" class="navbtn" onclick="shiftForecast(-1)"><i class="fa-solid fa-chevron-left text-[10px]"></i></button>
+            <button id="fcNext" class="navbtn" onclick="shiftForecast(1)"><i class="fa-solid fa-chevron-right text-[10px]"></i></button>
+          </div>
+        </div>
+        <div id="forecastList" class="space-y-3"></div>
+      </div>
+
+      <div class="bg-dark-card border border-dark-border p-4 rounded-2xl shadow-md space-y-3">
+        <h3 class="text-xs font-bold text-white">Gastos por Categoria</h3>
+        <div class="relative w-full h-48 flex items-center justify-center">
+          <canvas id="categoryChart"></canvas>
+        </div>
+      </div>
+
+      <div class="bg-dark-card border border-dark-border p-4 rounded-2xl shadow-md space-y-3">
+        <div class="flex justify-between items-center">
+          <h3 class="text-xs font-bold text-white">Limites por Categoria</h3>
+          <button onclick="openMetaModal()" class="text-[10px] bg-electric-500/20 text-electric-400 border border-electric-500/30 px-2 py-0.5 rounded-lg font-semibold hover:bg-electric-500 hover:text-white transition-all">+ Definir Meta</button>
+        </div>
+        <div id="metasProgressList" class="space-y-3 text-xs"></div>
+      </div>
+    </div>
+
+    <!-- SALDOS -->
+    <div id="tabSaldos" class="tab-pane hidden space-y-4">
+      <h2 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-wallet text-electric-400"></i> Saldos das Contas</h2>
+      <div class="bg-dark-card border border-electric-500/30 p-4 rounded-2xl shadow-md">
+        <span class="block text-[10px] text-slate-400 uppercase font-bold">Saldo total (todas as contas)</span>
+        <span id="saldoTotal" class="text-2xl font-extrabold text-emerald-400">R$ 0,00</span>
+      </div>
+      <p class="text-[11px] text-slate-400">Saldo de cada banco. Débito e PIX descontam daqui; entradas somam.</p>
+      <div id="saldosList" class="space-y-3"></div>
+
+      <div class="bg-dark-card border border-dark-border p-4 rounded-2xl shadow-md space-y-3">
+        <div class="flex justify-between items-center">
+          <h3 class="text-xs font-bold text-white flex items-center gap-2"><i class="fa-solid fa-piggy-bank text-electric-400"></i> Caixinhas</h3>
+          <button onclick="openGoalModal('new')" class="text-xs bg-electric-500/20 text-electric-400 border border-electric-500/30 px-2.5 py-1 rounded-xl font-semibold">+ Nova</button>
+        </div>
+        <div id="goalsList" class="space-y-4"></div>
+      </div>
+    </div>
+
+    <!-- CONFIGURAÇÕES / BACKUP -->
+    <div id="tabConfig" class="tab-pane hidden space-y-4">
+      <h2 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-gear text-electric-400"></i> Configurações & Backup</h2>
+      
+      <div class="bg-dark-card border border-dark-border p-4 rounded-2xl space-y-3 shadow-md">
+        <h3 class="text-xs font-bold text-white flex items-center gap-2"><i class="fa-solid fa-database text-electric-400"></i> Cópia de Segurança (Backup)</h3>
+        <p class="text-[11px] text-slate-400 leading-relaxed">Exporte seus dados para não perder ao mudar de navegador ou celular.</p>
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button onclick="exportBackup()" class="bg-electric-500 hover:bg-electric-600 text-white p-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all">
+            <i class="fa-solid fa-download"></i> Baixar Backup
+          </button>
+          <label class="bg-dark-input hover:bg-dark-border border border-dark-border text-slate-200 p-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-all">
+            <i class="fa-solid fa-upload"></i> Restaurar
+            <input type="file" id="importFileInput" accept=".json" onchange="importBackup(event)" class="hidden">
+          </label>
+          <button onclick="exportCSV()" class="col-span-2 bg-dark-input hover:bg-dark-border border border-dark-border text-slate-200 p-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"><i class="fa-solid fa-file-csv"></i> Baixar planilha (CSV para Google Sheets)</button>
+        </div>
+      </div>
+
+      <div class="bg-dark-card border border-dark-border p-4 rounded-2xl space-y-3 shadow-md">
+        <h3 class="text-xs font-bold text-white flex items-center gap-2"><i class="fa-solid fa-rotate text-electric-400"></i> Gastos recorrentes</h3>
+        <div id="recurringList" class="space-y-3"></div>
+      </div>
+
+      <div class="bg-dark-card border border-dark-border p-4 rounded-2xl space-y-3 shadow-md">
+        <h3 class="text-xs font-bold text-white flex items-center gap-2"><i class="fa-solid fa-lock text-electric-400"></i> Senha do app</h3>
+        <div id="securityBox" class="space-y-3"></div>
+      </div>
+
+      <div class="bg-dark-card border border-red-500/20 p-4 rounded-2xl space-y-2 shadow-md">
+        <h3 class="text-xs font-bold text-red-400 flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation"></i> Zona de Perigo</h3>
+        <p class="text-[11px] text-slate-400">Apaga todas as compras, cartões e metas registrados neste navegador.</p>
+        <button onclick="resetAllData()" class="w-full bg-red-600/20 hover:bg-red-600 border border-red-500/30 text-red-300 hover:text-white py-2 rounded-xl text-xs font-semibold transition-all mt-1">
+          Zerar Todos os Dados
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Modais -->
+  <div id="editModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-dark-card border border-dark-border w-full max-w-xs rounded-2xl p-4 space-y-3 shadow-2xl">
+      <div class="flex justify-between items-center">
+        <h3 class="text-sm font-bold text-white flex items-center gap-1.5"><i class="fa-solid fa-pen-to-square text-electric-400"></i> Editar Lançamento</h3>
+        <button onclick="closeEditModal()" class="text-slate-400 hover:text-white text-xs"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="space-y-2 text-xs">
+        <div>
+          <label class="text-slate-400 block mb-1">Descrição</label>
+          <input type="text" id="editNameInput" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+        </div>
+        <div>
+          <label class="text-slate-400 block mb-1">Valor (R$)</label>
+          <input type="text" id="editValueInput" inputmode="decimal" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+        </div>
+        <div>
+          <label class="text-slate-400 block mb-1">Categoria</label>
+          <select id="editCategorySelect" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></select>
+        </div>
+        <div>
+          <label class="text-slate-400 block mb-1">Forma de Pagamento</label>
+          <select id="editMethodSelect" onchange="toggleEditCardSelect()" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+            <option value="Crédito">Crédito</option>
+            <option value="Débito">Débito</option>
+            <option value="PIX">PIX</option>
+            <option value="Dinheiro">Dinheiro</option>
+            <option value="Entrada">Entrada (receita)</option>
+          </select>
+        </div>
+        <div id="editCardContainer">
+          <label class="text-slate-400 block mb-1">Cartão / Banco</label>
+          <select id="editCardSelect" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></select>
+        </div>
+      </div>
+
+      <div class="flex gap-2 pt-2">
+        <button onclick="closeEditModal()" class="flex-1 bg-dark-input text-slate-300 py-2 rounded-xl text-xs font-semibold hover:bg-dark-border">Cancelar</button>
+        <button onclick="saveEditedTransaction()" class="flex-1 bg-electric-500 text-white py-2 rounded-xl text-xs font-semibold hover:bg-electric-600">Salvar Alterações</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="deleteModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-dark-card border border-dark-border w-full max-w-xs rounded-2xl p-4 space-y-4 shadow-2xl">
+      <div class="text-center space-y-1">
+        <div class="w-10 h-10 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center mx-auto text-base"><i class="fa-solid fa-trash-can"></i></div>
+        <h3 class="text-sm font-bold text-white">Cancelar Lançamento</h3>
+        <p id="deleteModalMsg" class="text-xs text-slate-400"></p>
+      </div>
+      <div id="deleteModalOptions" class="space-y-2"></div>
+      <button onclick="closeDeleteModal()" class="w-full bg-dark-input text-slate-300 py-2 rounded-xl text-xs font-semibold hover:bg-dark-border">Voltar</button>
+    </div>
+  </div>
+
+  <div id="editScopeModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4 hidden">
+    <div class="bg-dark-card border border-dark-border w-full max-w-xs rounded-2xl p-4 space-y-4 shadow-2xl">
+      <div class="text-center space-y-1">
+        <div class="w-10 h-10 bg-electric-500/20 text-electric-400 rounded-full flex items-center justify-center mx-auto text-base"><i class="fa-solid fa-pen-to-square"></i></div>
+        <h3 class="text-sm font-bold text-white">Compra parcelada</h3>
+        <p class="text-xs text-slate-400">Quais parcelas devem receber essas alterações? O valor informado vale para cada parcela.</p>
+      </div>
+      <div class="space-y-2">
+        <button onclick="applyEditScope('single')" class="w-full bg-dark-input hover:bg-dark-border border border-dark-border text-white py-2.5 rounded-xl text-xs font-semibold">Somente esta parcela</button>
+        <button onclick="applyEditScope('next')" class="w-full bg-dark-input hover:bg-dark-border border border-dark-border text-white py-2.5 rounded-xl text-xs font-semibold">Esta e as próximas</button>
+        <button onclick="applyEditScope('all')" class="w-full bg-electric-500 hover:bg-electric-600 text-white py-2.5 rounded-xl text-xs font-semibold">Todas as parcelas</button>
+      </div>
+      <button onclick="closeEditScopeModal()" class="w-full bg-dark-input text-slate-300 py-2 rounded-xl text-xs font-semibold hover:bg-dark-border">Voltar</button>
+    </div>
+  </div>
+
+  <div id="goalModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-dark-card border border-dark-border w-full max-w-xs rounded-2xl p-4 space-y-3 shadow-2xl">
+      <h3 id="goalTitle" class="text-sm font-bold text-white"></h3>
+      <div id="goalNewFields" class="space-y-2 text-xs">
+        <input type="text" id="goalName" placeholder="Nome (ex: Viagem Japão)" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+        <input type="text" id="goalTarget" inputmode="decimal" placeholder="Meta em R$ (opcional)" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+      </div>
+      <div id="goalMoveFields" class="space-y-2 text-xs hidden">
+        <input type="text" id="goalAmount" inputmode="decimal" placeholder="Valor (ex: 200,00)" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+        <select id="goalBank" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></select>
+      </div>
+      <div id="goalNewBtns" class="flex gap-2">
+        <button onclick="closeGoalModal()" class="flex-1 bg-dark-input text-slate-300 py-2 rounded-xl text-xs font-semibold">Cancelar</button>
+        <button onclick="saveGoal()" class="flex-1 bg-electric-500 text-white py-2 rounded-xl text-xs font-semibold">Criar</button>
+      </div>
+      <div id="goalMoveBtns" class="hidden space-y-2">
+        <div class="flex gap-2">
+          <button onclick="moveGoal(1)" class="flex-1 bg-electric-500 text-white py-2 rounded-xl text-xs font-semibold">Guardar</button>
+          <button onclick="moveGoal(-1)" class="flex-1 bg-dark-input border border-dark-border text-slate-200 py-2 rounded-xl text-xs font-semibold">Retirar</button>
+        </div>
+        <button onclick="closeGoalModal()" class="w-full bg-dark-input text-slate-300 py-2 rounded-xl text-xs font-semibold">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cardModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-dark-card border border-dark-border w-full max-w-xs rounded-2xl p-4 space-y-3 shadow-2xl">
+      <h3 id="cardModalTitle" class="text-sm font-bold text-white">Adicionar Cartão</h3>
+      <div class="space-y-2 text-xs">
+        <div>
+          <label class="text-slate-400 block mb-1">Nome do Cartão / Banco</label>
+          <input type="text" id="newCardName" placeholder="Ex: Inter, Nubank..." class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-slate-400 block mb-1">Dia Fechamento</label>
+            <input type="number" id="newCardClosing" min="1" max="31" placeholder="Ex: 5" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+          </div>
+          <div>
+            <label class="text-slate-400 block mb-1">Dia Vencimento</label>
+            <input type="number" id="newCardDue" min="1" max="31" placeholder="Ex: 12" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+          </div>
+        </div>
+        <div>
+          <label class="text-slate-400 block mb-1">Saldo atual da conta (opcional)</label>
+          <input type="text" id="newCardBalance" inputmode="decimal" placeholder="Ex: 1.500,00" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+        </div>
+      </div>
+      <button id="cardDeleteBtn" onclick="deleteCard()" class="hidden w-full bg-red-600/20 hover:bg-red-600 border border-red-500/40 text-red-300 hover:text-white py-2 rounded-xl text-xs font-semibold">Excluir cartão</button>
+      <div class="flex gap-2 pt-2">
+        <button onclick="closeCardModal()" class="flex-1 bg-dark-input text-slate-300 py-2 rounded-xl text-xs font-semibold hover:bg-dark-border">Cancelar</button>
+        <button onclick="saveNewCard()" class="flex-1 bg-electric-500 text-white py-2 rounded-xl text-xs font-semibold hover:bg-electric-600">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="metaModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-dark-card border border-dark-border w-full max-w-xs rounded-2xl p-4 space-y-3 shadow-2xl">
+      <h3 class="text-sm font-bold text-white">Definir Teto de Gastos</h3>
+      <div class="space-y-2 text-xs">
+        <div>
+          <label class="text-slate-400 block mb-1">Categoria</label>
+          <select id="metaCategorySelect" onchange="toggleNewCategoryInput()" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></select>
+        </div>
+        <div id="newCategoryContainer" class="hidden">
+          <label class="text-slate-400 block mb-1">Nome da Nova Categoria</label>
+          <input type="text" id="newCategoryInput" placeholder="Ex: Lazer, Saúde..." class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+        </div>
+        <div>
+          <label class="text-slate-400 block mb-1">Limite Mensal (R$)</label>
+          <input type="text" id="metaValueInput" inputmode="decimal" placeholder="Ex: 800,00" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+        </div>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button onclick="closeMetaModal()" class="flex-1 bg-dark-input text-slate-300 py-2 rounded-xl text-xs font-semibold hover:bg-dark-border">Cancelar</button>
+        <button onclick="saveMetaCategory()" class="flex-1 bg-electric-500 text-white py-2 rounded-xl text-xs font-semibold hover:bg-electric-600">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Navigation Reordenado -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-dark-card/95 backdrop-blur-md border-t border-dark-border py-2.5 px-3 z-50">
+    <div class="max-w-md mx-auto flex justify-around items-center relative">
+      <button onclick="switchTab('chat')" id="navChat" class="flex flex-col items-center gap-1"><i class="fa-solid fa-house text-lg"></i><span class="text-[10px]">Início</span></button>
+      <button onclick="switchTab('extrato')" id="navExtrato" class="flex flex-col items-center gap-1"><i class="fa-solid fa-list-check text-lg"></i><span class="text-[10px]">Extrato</span></button>
+      <button onclick="switchTab('cartoes')" id="navCartoes" class="flex flex-col items-center gap-1"><i class="fa-solid fa-credit-card text-lg"></i><span class="text-[10px]">Faturas</span></button>
+      <button onclick="$('moreSheet').classList.toggle('hidden')" id="navMais" class="flex flex-col items-center gap-1"><i class="fa-solid fa-ellipsis text-lg"></i><span class="text-[10px]">Mais</span></button>
+      <div id="moreSheet" class="hidden absolute bottom-14 right-0 bg-dark-card border border-dark-border rounded-2xl p-2 shadow-2xl w-44 space-y-1">
+        <button onclick="switchTab('relatorios')" class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-200 hover:bg-dark-input"><i class="fa-solid fa-chart-pie w-4 text-electric-400"></i> Relatórios</button>
+        <button onclick="switchTab('saldos')" class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-200 hover:bg-dark-input"><i class="fa-solid fa-wallet w-4 text-electric-400"></i> Saldos e caixinhas</button>
+        <button onclick="switchTab('config')" class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-200 hover:bg-dark-input"><i class="fa-solid fa-gear w-4 text-electric-400"></i> Ajustes</button>
+      </div>
+    </div>
+  </nav>
+
+  <div id="lockScreen" class="fixed inset-0 z-[500] bg-dark-bg flex flex-col items-center justify-center p-6">
+    <img src="joaquim-logo.png" alt="Joaquim" id="lockLogo" class="w-28 h-28 rounded-full shadow-2xl shadow-electric-500/20">
+    <h1 class="mt-5 text-xl font-extrabold text-white font-inter">Joaquim <span class="text-electric-400">Finance</span></h1>
+    <p class="mt-1 text-sm text-slate-400">Cada centavo no seu lugar.</p>
+    <div id="pinBox" class="hidden mt-8 w-full max-w-[260px] space-y-4">
+      <p id="pinMsg" class="text-xs text-center text-slate-300"></p>
+      <div id="pinDots" class="flex justify-center gap-3"></div>
+      <div id="pinPad" class="grid grid-cols-3 gap-3"></div>
+      <button id="pinCancel" onclick="pinHide()" class="hidden w-full text-xs text-slate-400 py-1">Cancelar</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
