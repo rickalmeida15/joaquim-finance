@@ -31,10 +31,7 @@ function parseMoney(s) {
 }
 
 // ---------- Dados & Categorias ----------
-let cards = loadJSON('finances_cards', [
-  { id: 'nubank', name: 'Nubank', closingDay: 5, dueDay: 12, balance: 0 },
-  { id: 'itau', name: 'Itaú', closingDay: 15, dueDay: 22, balance: 0 }
-]);
+let cards = loadJSON('finances_cards', []);
 cards.forEach(c => { if (typeof c.balance !== 'number') c.balance = 0; });
 
 let customCategories = loadJSON('finances_categories', ['Alimentação', 'Transporte', 'Mercado', 'Geral']);
@@ -128,7 +125,7 @@ function openCardModal(id) {
   $('cardModalTitle').innerText = c ? 'Editar Cartão' : 'Adicionar Cartão';
   $('cardDeleteBtn').classList.toggle('hidden', !c);
   if (c) {
-    $('newCardName').value = c.name; $('newCardClosing').value = c.closingDay; $('newCardDue').value = c.dueDay;
+    $('newCardName').value = c.name; $('newCardClosing').value = c.closingDay || ''; $('newCardDue').value = c.dueDay || ''; previewCard();
     $('newCardBalance').value = (accountBalance(c) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
   }
   $('cardModal').classList.remove('hidden');
@@ -152,15 +149,16 @@ function saveNewCard() {
   const closingDay = parseInt($('newCardClosing').value);
   const dueDay = parseInt($('newCardDue').value);
   const okDay = d => d >= 1 && d <= 31;
-  if (!name || !okDay(closingDay) || !okDay(dueDay)) { toast('Preencha nome e dias (1 a 31) do cartão.'); return; }
+  const noCredit = isNaN(closingDay) && isNaN(dueDay);
+  if (!name || (!noCredit && (!okDay(closingDay) || !okDay(dueDay)))) { toast('Informe o nome. Cartão de crédito: preencha fechamento e vencimento (1 a 31). Só conta: deixe os dois em branco.'); return; }
   const balTxt = $('newCardBalance').value.trim();
   if (editingCardId) {
     const c = cards.find(x => x.id === editingCardId);
     if (c) {
-      c.name = name; c.closingDay = closingDay; c.dueDay = dueDay;
+      c.name = name; c.noCredit = noCredit; c.closingDay = noCredit ? null : closingDay; c.dueDay = noCredit ? null : dueDay;
       if (balTxt !== '') { const neg = balTxt.startsWith('-'); const v = parseMoney(balTxt.replace('-', '')); c.balance = (neg ? -v : v) + debitSum(c) - incomeSum(c) + goalMovSum(c); }
     }
-  } else cards.push({ id: uid(), name, closingDay, dueDay, balance: parseMoney(balTxt) });
+  } else cards.push({ id: uid(), name, noCredit, closingDay: noCredit ? null : closingDay, dueDay: noCredit ? null : dueDay, balance: parseMoney(balTxt) });
   refresh(); closeCardModal();
 }
 
@@ -347,9 +345,11 @@ function parseAndProcessText(text) {
 
   const data = { description, cents, installments, category, method: method || 'PIX', cardObj, isIncome, recurring: isRecurring, targetDate };
 
+  if (data.method === 'Crédito' && cardObj && cardObj.noCredit) { cardObj = null; data.cardObj = null; }
   if ((data.method === 'Crédito' || data.method === 'Débito' || data.method === 'PIX' || data.method === 'Entrada') && !cardObj) {
-    if (cards.length === 0) { addMessage('Cadastre um cartão na aba Faturas primeiro.', 'assistant'); return; }
-    if (cards.length === 1) { data.cardObj = cards[0]; processFinalTransaction(data); return; }
+    const pool = data.method === 'Crédito' ? creditCards() : cards;
+    if (!pool.length) { addMessage(data.method === 'Crédito' ? 'Cadastre um cartão de crédito na aba Faturas primeiro.' : 'Cadastre uma conta ou cartão na aba Faturas primeiro.', 'assistant'); return; }
+    if (pool.length === 1) { data.cardObj = pool[0]; processFinalTransaction(data); return; }
     pendingTransaction = data;
     askWhichCard();
   } else {
@@ -382,7 +382,7 @@ function askWhichCard() {
   addMessage(`
     <p class="mb-2 font-medium">${inc ? 'Em qual banco entrou' : 'Qual ' + what + ' você usou nesta compra de'} <b class="text-white">${brl(pendingTransaction.cents)}</b>?</p>
     <div class="flex flex-wrap gap-1.5 mt-2">
-      ${cards.map(c => `<button onclick="selectCard('${c.id}')" class="bg-electric-500/20 border border-electric-500/40 text-electric-400 hover:bg-electric-500 hover:text-white px-3 py-1 rounded-xl font-semibold active:scale-95">${esc(c.name)}</button>`).join('')}
+      ${(pendingTransaction.method === 'Crédito' ? creditCards() : cards).map(c => `<button onclick="selectCard('${c.id}')" class="bg-electric-500/20 border border-electric-500/40 text-electric-400 hover:bg-electric-500 hover:text-white px-3 py-1 rounded-xl font-semibold active:scale-95">${esc(c.name)}</button>`).join('')}
     </div>`, 'assistant');
 }
 
@@ -604,15 +604,8 @@ function fmtBigBrl(cents) {
 
 // Retorna cor e ícone característicos do banco/cartão
 function getBankCardStyle(cardName) {
-  const lower = (cardName || '').toLowerCase();
-  if (lower.includes('nubank') || lower.includes('nu')) return { bg: 'bg-purple-600', icon: 'fa-credit-card' };
-  if (lower.includes('itaú') || lower.includes('itau')) return { bg: 'bg-orange-500', icon: 'fa-building-columns' };
-  if (lower.includes('inter')) return { bg: 'bg-amber-500', icon: 'fa-bolt' };
-  if (lower.includes('bradesco')) return { bg: 'bg-red-600', icon: 'fa-building-columns' };
-  if (lower.includes('santander')) return { bg: 'bg-red-700', icon: 'fa-fire' };
-  if (lower.includes('c6')) return { bg: 'bg-slate-800', icon: 'fa-credit-card' };
-  if (lower.includes('btg')) return { bg: 'bg-blue-900', icon: 'fa-shield' };
-  return { bg: 'bg-electric-500', icon: 'fa-credit-card' };
+  const b = bankBrand(cardName);
+  return { bg: '', css: `background:${b.bg};color:${b.fg};`, icon: 'fa-credit-card', brand: b };
 }
 
 // Transição fluida de expansão dos cartões ao clicar no stack
@@ -680,6 +673,8 @@ function animateCards(forward) {
       if (!t) return null;
       const c = document.createElement('div');
       c.className = [...p.classList].filter(k => k.startsWith('bg-')).join(' ');
+      const cs = getComputedStyle(p);
+      c.style.backgroundImage = cs.backgroundImage; c.style.backgroundColor = cs.backgroundColor;
       Object.assign(c.style, { position: 'fixed', left: f.left + 'px', top: f.top + 'px', width: f.width + 'px', height: f.height + 'px', borderRadius: rf, zIndex: 40, pointerEvents: 'none', boxSizing: 'border-box' });
       document.body.appendChild(c);
       p.style.visibility = 'hidden';
@@ -706,17 +701,17 @@ function renderHeaderCardStack() {
   const container = $('headerCardStack');
   if (!container) return;
 
-  if (!cards.length) {
+  if (!creditCards().length) {
     container.innerHTML = `<span class="text-[9px] text-slate-500">Sem cartões</span>`;
     return;
   }
 
-  container.innerHTML = cards.map((card, idx) => {
+  container.innerHTML = creditCards().map((card, idx) => {
     const style = getBankCardStyle(card.name);
     return `
-      <div class="mini-card-pill ${style.bg}" data-card-id="${card.id}" style="z-index: ${idx + 1};" title="${esc(card.name)}">
+      <div class="mini-card-pill" data-card-id="${card.id}" style="z-index: ${idx + 1}; ${style.css}" title="${esc(card.name)}">
         <div class="flex justify-between items-center text-[8px] text-white/80">
-          <i class="fa-solid ${style.icon}"></i>
+          ${brandAvatar(style.brand, 18)}
         </div>
         <div class="text-[7px] font-bold text-white/90 truncate uppercase tracking-tighter">${esc(card.name)}</div>
       </div>
@@ -772,7 +767,7 @@ function renderExtrato() {
     out += `
     <div onclick="openEditModal(${t.id}, event)" class="flex justify-between items-center p-2.5 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer">
       <div class="flex items-center gap-3">
-        <div class="icon-avatar ${style.bg} shadow-sm"><i class="${style.icon}"></i></div>
+        ${txAvatar(t.name, t.category)}
         <div>
           <span class="text-xs font-bold text-slate-800 block leading-tight font-inter">${esc(label(t))}</span>
           <span class="text-[10px] text-slate-400 font-medium">${esc(t.category)} • ${t.method}${c ? ' (' + esc(c.name) + ')' : ''}</span>
@@ -954,7 +949,7 @@ function renderSaldos() {
       return `
       <div class="bg-dark-card border border-dark-border p-4 rounded-2xl shadow-md flex justify-between items-center">
         <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-xl bg-electric-500/10 border border-electric-500/30 flex items-center justify-center text-electric-400"><i class="fa-solid fa-building-columns"></i></div>
+          ${brandAvatar(bankBrand(card.name), 36, '12px')}
           <div>
             <h3 class="text-xs font-bold text-white">${esc(card.name)}</h3>
             <span class="text-sm font-extrabold ${bal < 0 ? 'text-red-400' : 'text-emerald-400'}">${brl(bal)}</span>
@@ -972,7 +967,7 @@ function renderCartoes() {
   $('faturaNav').innerText = faturaOffset === 0 ? 'Fatura aberta' : (faturaOffset > 0 ? `+${faturaOffset} mês` : `${faturaOffset} mês`);
   if (!cards.length) { $('cardsList').innerHTML = `<p class="text-xs text-slate-500 text-center py-4">Nenhum cartão cadastrado.</p>`; return; }
 
-  $('cardsList').innerHTML = cards.map(card => {
+  $('cardsList').innerHTML = !creditCards().length ? `<div class="text-center space-y-3 py-8"><img src="joaquim-logo.png" alt="" class="w-16 h-16 rounded-full mx-auto"><p class="text-xs text-slate-400">Nenhum cartão de crédito cadastrado ainda.</p><button onclick="openCardModal()" class="bg-electric-500 text-white px-4 py-2 rounded-xl text-xs font-semibold">+ Cadastrar cartão</button></div>` : creditCards().map(card => {
     const key = shiftKey(openInvoiceKey(card), faturaOffset);
     const items = transactions.filter(t => t.cardId === card.id && t.method === 'Crédito' && invoiceKeyOf(parseIso(t.date), card) === key)
       .sort((a, b) => b.date.localeCompare(a.date));
@@ -998,13 +993,13 @@ function renderCartoes() {
         </div>`;
 
     return `
-      <div data-card-id="${card.id}" onclick="toggleCardExpand('${card.id}')" class="${style.bg} p-5 rounded-3xl shadow-2xl cursor-pointer transition-all hover:scale-[1.01] text-white border border-white/10 space-y-4">
+      <div data-card-id="${card.id}" onclick="toggleCardExpand('${card.id}')" style="${style.css}" class="p-5 rounded-3xl shadow-2xl cursor-pointer transition-all hover:scale-[1.01] text-white border border-white/10 space-y-4">
         <div class="flex justify-between items-start">
           <div>
             <span class="text-[10px] uppercase tracking-wider font-semibold opacity-80 block mb-0.5">Cartão de Crédito</span>
             <h3 class="text-lg font-extrabold font-inter tracking-tight flex items-center gap-2">
               ${esc(card.name)}
-              <i class="fa-solid ${style.icon} text-sm opacity-90"></i>
+              ${brandAvatar(style.brand, 26)}
             </h3>
           </div>
           <div class="flex items-center gap-2">
@@ -1104,7 +1099,7 @@ function renderAlerts() {
   const box = $('alertBox'); if (!box) return;
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const items = [];
-  cards.forEach(card => {
+  creditCards().forEach(card => {
     [shiftKey(openInvoiceKey(card), -1), openInvoiceKey(card)].forEach(key => {
       if (paidInvoices.includes(card.id + '|' + key)) return;
       const total = transactions.filter(t => t.cardId === card.id && t.method === 'Crédito' && invoiceKeyOf(parseIso(t.date), card) === key).reduce((a, t) => a + t.cents, 0);
@@ -1188,6 +1183,131 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { ge
     if (next) switchTab(next, dx < 0 ? 1 : -1);
   }, { passive: true });
 })();
+
+// ---------- Marcas: cores e logos ----------
+// Logos: primeiro tenta o arquivo logos/<nome>.png (se você colocar na pasta), depois o logo do site da marca; sem nada, mostra a sigla colorida.
+const ONLINE_LOGOS = true;
+const BRANDS = [
+  // [tipo (b=banco/cartão, s=loja), nome-do-arquivo, padrão, site, fundo, texto, sigla]
+  ['b','nubank','nubank|\\bnu\\b','nubank.com.br','#820AD1','#fff','nu'],
+  ['b','c6','\\bc6\\b','c6bank.com.br','linear-gradient(135deg,#3a3a3c,#0b0b0c)','#fff','C6'],
+  ['b','inter','\\binter\\b','inter.co','#FF7A00','#fff','inter'],
+  ['b','mercadopago','mercado ?pago','mercadopago.com.br','#009EE3','#fff','MP'],
+  ['b','credicard','cred[ei]?card','credicard.com.br','#F26522','#fff','CC'],
+  ['b','itau','\\bita[u]?\\b|itau','itau.com.br','#EC7000','#fff','itaú'],
+  ['b','bradesco','bradesco','banco.bradesco','#CC092F','#fff','B'],
+  ['b','santander','santander','santander.com.br','#EC0000','#fff','S'],
+  ['b','bb','banco do brasil|\\bbb\\b','bb.com.br','#FAE128','#0038A8','BB'],
+  ['b','caixa','caixa','caixa.gov.br','#005CA9','#fff','CX'],
+  ['b','picpay','picpay','picpay.com','#21C25E','#fff','PP'],
+  ['b','neon','\\bneon\\b','neon.com.br','#00B8C9','#fff','N'],
+  ['b','xp','\\bxp\\b','xpi.com.br','#111','#FFD400','XP'],
+  ['b','btg','\\bbtg','btgpactual.com','#001E62','#fff','BTG'],
+  ['b','sicredi','sicredi','sicredi.com.br','#3FA110','#fff','Si'],
+  ['b','sicoob','sicoob','sicoob.com.br','#003641','#fff','Sc'],
+  ['b','will','will bank|\\bwill\\b','willbank.com.br','#FFD500','#111','W'],
+  ['b','original','banco original','original.com.br','#00A859','#fff','O'],
+  ['b','safra','safra','safra.com.br','#00205B','#fff','S'],
+  ['s','uber','\\buber\\b','uber.com','#000','#fff','U'],
+  ['s','99','\\b99\\b','99app.com','#FFC400','#111','99'],
+  ['s','ifood','ifood','ifood.com.br','#EA1D2C','#fff','iF'],
+  ['s','rappi','rappi','rappi.com.br','#FF441F','#fff','R'],
+  ['s','netflix','netflix','netflix.com','#E50914','#fff','N'],
+  ['s','spotify','spotify','spotify.com','#1DB954','#fff','S'],
+  ['s','amazon','amazon|prime video','amazon.com.br','#FF9900','#111','a'],
+  ['s','mercadolivre','mercado ?livre','mercadolivre.com.br','#FFE600','#111','ML'],
+  ['s','shopee','shopee','shopee.com.br','#EE4D2D','#fff','S'],
+  ['s','aliexpress','aliexpress','aliexpress.com','#E62E04','#fff','Ali'],
+  ['s','shein','shein','shein.com','#111','#fff','S'],
+  ['s','magalu','magalu|magazine luiza','magazineluiza.com.br','#0086FF','#fff','M'],
+  ['s','americanas','americanas','americanas.com.br','#E60014','#fff','A'],
+  ['s','kabum','kabum','kabum.com.br','#0060B1','#fff','K'],
+  ['s','muffato','muffato','supermuffato.com.br','#D71920','#fff','M'],
+  ['s','cinemark','cinemark','cinemark.com.br','#E4002B','#fff','C'],
+  ['s','carrefour','carrefour','carrefour.com.br','#004E9A','#fff','C'],
+  ['s','assai','assai','assai.com.br','#F7941D','#fff','A'],
+  ['s','atacadao','atacadao','atacadao.com.br','#E30613','#fff','A'],
+  ['s','paodeacucar','pao de acucar','paodeacucar.com','#E2001A','#fff','PA'],
+  ['s','havan','havan','havan.com.br','#0F5CA8','#fff','H'],
+  ['s','leroy','leroy','leroymerlin.com.br','#78BE20','#fff','LM'],
+  ['s','apple','apple|iphone|macbook|ipad','apple.com','#111','#fff','A'],
+  ['s','google','google','google.com','#fff','#4285F4','G'],
+  ['s','youtube','youtube','youtube.com','#FF0000','#fff','▶'],
+  ['s','disney','disney','disneyplus.com','#113CCF','#fff','D+'],
+  ['s','hbo','\\bhbo\\b|\\bmax\\b','max.com','#5822B4','#fff','max'],
+  ['s','steam','steam','steampowered.com','#171A21','#fff','S'],
+  ['s','playstation','playstation|\\bpsn\\b','playstation.com','#003791','#fff','PS'],
+  ['s','xbox','xbox|microsoft','xbox.com','#107C10','#fff','X'],
+  ['s','mcdonalds','mc ?donald','mcdonalds.com.br','#FFC72C','#DA291C','M'],
+  ['s','burgerking','burger king|\\bbk\\b','burgerking.com.br','#D62300','#fff','BK'],
+  ['s','subway','subway','subway.com','#008C15','#fff','S'],
+  ['s','starbucks','starbucks','starbucks.com.br','#00704A','#fff','S'],
+  ['s','outback','outback','outback.com.br','#8B1E2D','#fff','O'],
+  ['s','petz','petz','petz.com.br','#FF6600','#fff','P'],
+  ['s','cobasi','cobasi','cobasi.com.br','#E4002B','#fff','C'],
+  ['s','shell','\\bshell\\b','shell.com.br','#FFD500','#DD1D21','S'],
+  ['s','ipiranga','ipiranga','ipiranga.com.br','#F5A800','#003F87','I'],
+  ['s','drogasil','drogasil|droga raia|\\braia\\b','drogasil.com.br','#E30613','#fff','D'],
+  ['s','paguemenos','pague menos','paguemenos.com.br','#0055A5','#fff','PM'],
+  ['s','renner','renner','lojasrenner.com.br','#E4002B','#fff','R'],
+  ['s','cea','\\bc ?& ?a\\b|\\bcea\\b','cea.com.br','#E4002B','#fff','C&A'],
+  ['s','riachuelo','riachuelo','riachuelo.com.br','#E2001A','#fff','R'],
+  ['s','zara','\\bzara\\b','zara.com','#111','#fff','Z'],
+  ['s','nike','\\bnike\\b','nike.com.br','#111','#fff','N'],
+  ['s','adidas','adidas','adidas.com.br','#111','#fff','a'],
+  ['s','decathlon','decathlon','decathlon.com.br','#0082C3','#fff','D'],
+  ['s','smartfit','smart ?fit','smartfit.com.br','#FFC700','#111','SF'],
+  ['s','tim','\\btim\\b','tim.com.br','#0033A0','#fff','TIM'],
+  ['s','vivo','\\bvivo\\b','vivo.com.br','#660099','#fff','V'],
+  ['s','claro','\\bclaro\\b','claro.com.br','#E30613','#fff','C'],
+  ['s','airbnb','airbnb','airbnb.com.br','#FF5A5F','#fff','A'],
+  ['s','booking','booking','booking.com','#003580','#fff','B'],
+  ['s','latam','latam','latamairlines.com','#1B0088','#fff','L'],
+  ['s','gol','\\bgol\\b','voegol.com.br','#FF7020','#fff','G'],
+  ['s','azul','\\bazul\\b','voeazul.com.br','#0033A0','#fff','A']
+].map(([kind, slug, re, dom, bg, fg, mono]) => ({ kind, slug, re: new RegExp(re), dom, bg, fg, mono }));
+
+const brandOf = (name, kind) => { const n = normTxt(name); return BRANDS.find(b => b.kind === kind && b.re.test(n)) || null; };
+
+// Banco/cartão desconhecido: cor estável pelo nome + iniciais
+function bankBrand(name) {
+  const b = brandOf(name, 'b');
+  if (b) return b;
+  const pal = ['#0EA5E9', '#14B8A6', '#8B5CF6', '#EC4899', '#F59E0B', '#64748B', '#10B981', '#6366F1'];
+  let h = 0; for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const mono = String(name).trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?';
+  return { slug: '', dom: '', bg: pal[h % pal.length], fg: '#fff', mono };
+}
+
+function brandAvatar(b, px = 42, radius = '50%') {
+  const fs = Math.round(px * (b.mono.length > 2 ? 0.3 : b.mono.length === 2 ? 0.36 : 0.44));
+  const img = b.dom ? `<img src="logos/${b.slug}.png" data-dom="${b.dom}" onerror="logoFail(this)" alt="" class="absolute inset-0 w-full h-full object-contain bg-white" style="padding:${Math.round(px * 0.14)}px">` : '';
+  return `<div class="relative shrink-0 overflow-hidden flex items-center justify-center font-extrabold leading-none" style="width:${px}px;height:${px}px;border-radius:${radius};background:${b.bg};color:${b.fg};font-size:${fs}px">${esc(b.mono)}${img}</div>`;
+}
+function logoFail(img) {
+  if (!img.dataset.t && ONLINE_LOGOS && img.dataset.dom) {
+    img.dataset.t = '1';
+    img.src = 'https://www.google.com/s2/favicons?domain=' + img.dataset.dom + '&sz=128';
+  } else img.remove();
+}
+
+// Avatar de um gasto: logo da marca quando conhecida; senão o ícone da categoria
+function txAvatar(name, cat) {
+  const b = brandOf(name, 's');
+  if (b) return brandAvatar(b, 42);
+  const s = getTransactionBrandIcon(name, cat);
+  return `<div class="icon-avatar ${s.bg} shadow-sm"><i class="${s.icon}"></i></div>`;
+}
+
+const creditCards = () => cards.filter(c => !c.noCredit);
+
+function previewCard() {
+  const el = $('cardPreview'); if (!el) return;
+  const name = $('newCardName').value.trim();
+  if (!name) { el.innerHTML = ''; return; }
+  const s = getBankCardStyle(name);
+  el.innerHTML = `<div class="rounded-2xl p-3 flex items-center gap-3 shadow-lg" style="${s.css}">${brandAvatar(s.brand, 34)}<span class="font-extrabold text-sm">${esc(name)}</span></div>`;
+}
 
 // ---------- Avisos rápidos (no lugar da caixa do navegador) ----------
 function toast(msg) {

@@ -46,8 +46,6 @@
     <!-- CHAT (Estrutura com caixa de input fixa no fundo) -->
     <div id="tabChat" class="tab-pane flex flex-col justify-between h-[calc(100dvh-190px)] overflow-hidden">
       
-      <div id="homeSummary" class="shrink-0 space-y-2 mb-3"></div>
-
       <!-- 1. Lista de Mensagens que Rola (Tudo o que for enviado entra AQUI dentro) -->
       <div id="chatMessages" class="flex-1 overflow-y-auto pr-1 text-xs space-y-3.5 pb-3">
         <div class="flex gap-2.5 items-start">
@@ -60,7 +58,7 @@
             <div class="bg-dark-bg p-2.5 rounded-xl border border-dark-border/60 text-[11px] space-y-1 font-mono text-electric-400">
               <p>• "Comprei notebook por 4.500 em 9x"</p>
               <p>• "Almoço 45 no crédito ontem"</p>
-              <p>• "Mercado 120 no débito Itaú"</p>
+              <p>• "Mercado 120 no débito"</p>
             </div>
           </div>
         </div>
@@ -329,8 +327,10 @@
       <div class="space-y-2 text-xs">
         <div>
           <label class="text-slate-400 block mb-1">Nome do Cartão / Banco</label>
-          <input type="text" id="newCardName" placeholder="Ex: Inter, Nubank..." class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+          <input type="text" id="newCardName" oninput="previewCard()" placeholder="Ex: Inter, Nubank..." class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
         </div>
+        <div id="cardPreview"></div>
+        <p class="text-[11px] text-slate-400">Fechamento e vencimento: deixe em branco se for só uma conta, sem cartão de crédito.</p>
         <div class="grid grid-cols-2 gap-2">
           <div>
             <label class="text-slate-400 block mb-1">Dia Fechamento</label>
