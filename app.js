@@ -106,7 +106,7 @@ const save = () => {
 };
 
 const refresh = () => { save(); renderAll(); };
-const renderAll = () => { renderExtrato(); renderCartoes(); renderSaldos(); renderRelatorios(); populateCategoryDropdowns(); renderRecurring(); renderForecast(); renderAlerts(); renderHome(); renderGoals(); renderSecurity(); };
+const renderAll = () => { renderExtrato(); renderCartoes(); renderSaldos(); renderRelatorios(); populateCategoryDropdowns(); renderRecurring(); renderForecast(); renderAlerts(); renderHome(); renderGoals(); renderSecurity(); fitChat(); };
 
 document.addEventListener('DOMContentLoaded', () => {
   startClock(); startLock(); generateRecurring(); switchTab('chat'); save(); renderAll();
@@ -216,7 +216,7 @@ function switchTab(tab, dir = 0, plain = false) {
   const inMais = ['relatorios', 'saldos', 'config'].includes(tab);
   $('navMais').className = 'flex flex-col items-center gap-1 transition-all duration-200 ' + (inMais ? 'text-electric-400 font-medium scale-105' : 'text-slate-400 hover:text-slate-200');
   $('moreSheet').classList.add('hidden');
-  if (tab === 'chat') renderHome();
+  if (tab === 'chat') { renderHome(); fitChat(); }
   if (tab === 'relatorios') renderRelatorios();
   if (tab === 'cartoes') renderCartoes();
   if (tab === 'extrato') renderExtrato();
@@ -1337,6 +1337,18 @@ function startLock() {
   if (logo.animate) logo.animate([{ opacity: 0, transform: 'scale(.85)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 600, easing: 'ease-out' });
   setTimeout(() => { if (localStorage.getItem(PIN_KEY)) pinShow('unlock', 'Digite sua senha'); else pinHide(); }, 1500);
 }
+
+// ---------- Ajusta a altura do chat à tela real do celular ----------
+function fitChat() {
+  const p = $('tabChat'), hd = document.querySelector('header'), nv = document.querySelector('nav'), al = $('alertBox');
+  if (!p || !hd || !nv) return;
+  const alertH = al && al.offsetHeight ? al.offsetHeight + 12 : 0;
+  const h = window.innerHeight - hd.offsetHeight - nv.offsetHeight - alertH - 16 - 12;
+  p.style.height = Math.max(300, h) + 'px';
+}
+window.addEventListener('resize', fitChat);
+window.addEventListener('orientationchange', fitChat);
+window.addEventListener('load', fitChat);
 
 // ---------- App instalável (PWA) ----------
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(() => {});
