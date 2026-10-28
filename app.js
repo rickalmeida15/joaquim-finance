@@ -1307,10 +1307,20 @@ const BRANDS = [
   ['s','hdi','\\bhdi\\b','hdiseguros.com.br','#00A859','#fff','HDI'],
   ['s','mapfre','mapfre','mapfre.com.br','#E4002B','#fff','M'],
   ['s','mei','\\bmei\\b|simples nacional|\\bdas mei\\b','gov.br','#1351B4','#fff','MEI'],
-  ['s','bluefit','bluefit','bluefit.com.br','#0066FF','#fff','BF']
+  ['s','bluefit','bluefit','bluefit.com.br','#0066FF','#fff','BF'],
+  ['s','caixa','\\bcaixa\\b(?! d[eao]s? )','caixa.gov.br','#005CA9','#fff','CX'],
+  ['s','loft','\\bloft\\b','loft.com.br','#111','#fff','L'],
+  ['s','mks','\\bmks\\b|mks ?connect|mks ?net','','#00913F','#fff','MKS']
 ].map(([kind, slug, re, dom, bg, fg, mono]) => ({ kind, slug, re: new RegExp(re), dom, bg, fg, mono }));
 
 const brandOf = (name, kind) => { const n = normTxt(name); return BRANDS.find(b => b.kind === kind && b.re.test(n)) || null; };
+
+const SAFE_BANKS = new Set(['nubank', 'c6', 'mercadopago', 'credicard', 'itau', 'bradesco', 'santander', 'picpay', 'btg', 'sicredi', 'sicoob']);
+const brandAny = name => {
+  const s = brandOf(name, 's'); if (s) return s;
+  const n = normTxt(name);
+  return BRANDS.find(b => b.kind === 'b' && SAFE_BANKS.has(b.slug) && b.re.test(n)) || null;
+};
 
 // Banco/cartão desconhecido: cor estável pelo nome + iniciais
 function bankBrand(name) {
@@ -1324,7 +1334,7 @@ function bankBrand(name) {
 
 function brandAvatar(b, px = 42, radius = '50%') {
   const fs = Math.round(px * (b.mono.length > 2 ? 0.3 : b.mono.length === 2 ? 0.36 : 0.44));
-  const img = b.dom ? `<img src="logos/${b.slug}.png" data-dom="${b.dom}" onerror="logoFail(this)" alt="" class="absolute inset-0 w-full h-full object-contain bg-white" style="padding:${Math.round(px * 0.14)}px">` : '';
+  const img = b.slug ? `<img src="logos/${b.slug}.png" data-dom="${b.dom}" onerror="logoFail(this)" alt="" class="absolute inset-0 w-full h-full object-contain bg-white" style="padding:${Math.round(px * 0.14)}px">` : '';
   return `<div class="relative shrink-0 overflow-hidden flex items-center justify-center font-extrabold leading-none" style="width:${px}px;height:${px}px;border-radius:${radius};background:${b.bg};color:${b.fg};font-size:${fs}px">${esc(b.mono)}${img}</div>`;
 }
 function logoFail(img) {
@@ -1336,7 +1346,7 @@ function logoFail(img) {
 
 // Avatar de um gasto: logo da marca quando conhecida; senão o ícone da categoria
 function txAvatar(name, cat) {
-  const b = brandOf(name, 's');
+  const b = brandAny(name);
   if (b) return brandAvatar(b, 42);
   const s = getTransactionBrandIcon(name, cat);
   return `<div class="icon-avatar ${s.bg} shadow-sm"><i class="${s.icon}"></i></div>`;
@@ -1585,7 +1595,7 @@ function renderBills() {
         : `<span class="${days < 0 ? 'text-red-400' : days <= 3 ? 'text-yellow-400' : 'text-slate-400'}">${dueText(days)} (dia ${due.getDate()})</span>`;
       const parc = b.months ? ` • parcela ${monthDiff(billFirst(b), key) + 1}/${b.months}` : '';
       const val = p ? brl(p.cents) : (b.exact ? '' : '≈ ') + brl(b.cents);
-      const brand = brandOf(b.name, 's');
+      const brand = brandAny(b.name);
       const av = brand ? brandAvatar(brand, 38, '12px') : `<div class="w-[38px] h-[38px] rounded-xl bg-electric-500/10 border border-electric-500/30 flex items-center justify-center text-electric-400 shrink-0"><i class="fa-solid fa-file-invoice-dollar"></i></div>`;
       return `<div class="bg-dark-card border border-dark-border rounded-2xl p-3 space-y-2">
         <div class="flex items-center gap-3">${av}
@@ -1615,7 +1625,7 @@ function openBillModal(id) {
   $('billModal').classList.remove('hidden');
 }
 function previewBill() {
-  const n = $('billName').value.trim(), b = n && brandOf(n, 's'), el = $('billPreview');
+  const n = $('billName').value.trim(), b = n && brandAny(n), el = $('billPreview');
   if (el) el.innerHTML = b ? `<div class="flex items-center gap-2 text-[11px] text-slate-300">${brandAvatar(b, 28, '8px')} Logo encontrado</div>` : '';
 }
 function closeBillModal() { $('billModal').classList.add('hidden'); billEditing = null; }
