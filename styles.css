@@ -150,6 +150,9 @@
 }
 
 /* Letras pequenas demais ficavam difíceis de ler: sobe um degrau */
-.text-\[9px\] { font-size: 11px !important; }
-.text-\[10px\] { font-size: 11px !important; }
-.text-\[11px\] { font-size: 12px !important; }
+.text-\[9px\] { font-size: 12px !important; }
+.text-\[10px\] { font-size: 12px !important; }
+.text-\[11px\] { font-size: 13px !important; }
+
+/* Aumenta todas as letras um pouco (tudo que usa rem acompanha) */
+html { font-size: 17px; }

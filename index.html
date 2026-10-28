@@ -325,11 +325,13 @@
         </div>
         <div><label class="text-slate-400 block mb-1">Tipo de valor</label>
           <select id="billExact" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"><option value="exact">Valor exato (sempre igual)</option><option value="est">Estimativa (confirmo ao pagar)</option></select></div>
+        <div><label class="text-slate-400 block mb-1">Quando vence</label>
+          <select id="billLag" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"><option value="1">No mês seguinte (aluguel, energia...)</option><option value="0">No mesmo mês</option></select></div>
         <div class="grid grid-cols-2 gap-2">
           <div><label class="text-slate-400 block mb-1">Começa em</label><input type="month" id="billStart" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></div>
           <div><label class="text-slate-400 block mb-1">Nº de parcelas</label><input type="number" id="billMonths" min="1" placeholder="todo mês" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></div>
         </div>
-        <p class="text-[11px] text-slate-400">Parcelas: preencha só se a conta acaba (ex: entrada do apê em 36x). Em branco, ela se repete todo mês.</p>
+        <p class="text-[11px] text-slate-400">Começa em = mês a que a conta se refere; no mês seguinte, ela aparece 1 mês depois. Parcelas: preencha só se a conta acaba (ex: entrada do apê em 36x). Em branco, ela se repete todo mês.</p>
       </div>
       <button id="billDeleteBtn" onclick="deleteBill()" class="hidden w-full bg-red-600/20 hover:bg-red-600 border border-red-500/40 text-red-300 hover:text-white py-2 rounded-xl text-xs font-semibold">Excluir conta</button>
       <div class="flex gap-2">

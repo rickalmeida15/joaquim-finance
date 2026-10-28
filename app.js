@@ -1554,7 +1554,8 @@ function finishOnboarding() {
 let bills = loadJSON('finances_bills', []);
 let billsOffset = 0, billEditing = null, billPaying = null;
 const monthDiff = (a, b) => { const [y1, m1] = a.split('-').map(Number), [y2, m2] = b.split('-').map(Number); return (y2 - y1) * 12 + (m2 - m1); };
-const billActive = (b, key) => { const d = monthDiff(b.startKey, key); return d >= 0 && (!b.months || d < b.months); };
+const billFirst = b => shiftKey(b.startKey, b.lag || 0); // mês do 1º vencimento
+const billActive = (b, key) => { const d = monthDiff(billFirst(b), key); return d >= 0 && (!b.months || d < b.months); };
 const billDue = (b, key) => { const [y, m] = key.split('-').map(Number); return new Date(y, m - 1, Math.min(b.day, new Date(y, m, 0).getDate())); };
 // "paga" só vale se o lançamento ainda existe no Extrato
 const billPayment = (b, key) => { const p = b.paid && b.paid[key]; return p && transactions.some(t => t.id === p.txId) ? p : null; };
@@ -1582,7 +1583,7 @@ function renderBills() {
       const days = daysUntil(due);
       const stat = p ? `<span class="text-emerald-400">✓ pago ${fmtDate(isoDate(new Date(p.date || due)))}</span>`
         : `<span class="${days < 0 ? 'text-red-400' : days <= 3 ? 'text-yellow-400' : 'text-slate-400'}">${dueText(days)} (dia ${due.getDate()})</span>`;
-      const parc = b.months ? ` • parcela ${monthDiff(b.startKey, key) + 1}/${b.months}` : '';
+      const parc = b.months ? ` • parcela ${monthDiff(billFirst(b), key) + 1}/${b.months}` : '';
       const val = p ? brl(p.cents) : (b.exact ? '' : '≈ ') + brl(b.cents);
       const brand = brandOf(b.name, 's');
       const av = brand ? brandAvatar(brand, 38, '12px') : `<div class="w-[38px] h-[38px] rounded-xl bg-electric-500/10 border border-electric-500/30 flex items-center justify-center text-electric-400 shrink-0"><i class="fa-solid fa-file-invoice-dollar"></i></div>`;
@@ -1608,6 +1609,7 @@ function openBillModal(id) {
   $('billDay').value = b ? b.day : '';
   $('billMonths').value = b && b.months ? b.months : '';
   $('billStart').value = b ? b.startKey : monthKey(new Date());
+  $('billLag').value = b ? String(b.lag || 0) : '1';
   $('billDeleteBtn').classList.toggle('hidden', !b);
   previewBill();
   $('billModal').classList.remove('hidden');
@@ -1620,7 +1622,7 @@ function closeBillModal() { $('billModal').classList.add('hidden'); billEditing 
 function saveBill() {
   const name = $('billName').value.trim(), cents = parseMoney($('billAmount').value.trim()), day = parseInt($('billDay').value);
   if (!name || !cents || !(day >= 1 && day <= 31)) { toast('Informe nome, valor e dia do vencimento (1 a 31).'); return; }
-  const data = { name, cents, day, exact: $('billExact').value === 'exact', months: parseInt($('billMonths').value) || null, startKey: $('billStart').value || monthKey(new Date()), category: 'Contas' };
+  const data = { name, cents, day, exact: $('billExact').value === 'exact', months: parseInt($('billMonths').value) || null, startKey: $('billStart').value || monthKey(new Date()), lag: parseInt($('billLag').value) || 0, category: 'Contas' };
   if (billEditing) Object.assign(bills.find(x => x.id === billEditing), data);
   else bills.push({ id: uid(), paid: {}, ...data });
   refresh(); closeBillModal();
