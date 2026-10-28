@@ -185,6 +185,23 @@
     </div>
 
     <!-- CONFIGURAÇÕES / BACKUP -->
+    <div id="tabContas" class="tab-pane hidden space-y-4">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-file-invoice-dollar text-electric-400"></i> Contas a pagar</h2>
+        <button onclick="openBillModal()" class="text-xs bg-electric-500/20 text-electric-400 border border-electric-500/30 px-2.5 py-1 rounded-xl font-semibold">+ Nova conta</button>
+      </div>
+      <div class="flex items-center justify-between">
+        <p class="text-[11px] text-slate-400">Luz, água, condomínio, parcelas...</p>
+        <div class="flex items-center gap-2">
+          <button class="navbtn" onclick="shiftBills(-1)"><i class="fa-solid fa-chevron-left text-[10px]"></i></button>
+          <span id="billsMonth" class="text-xs font-semibold text-white w-24 text-center"></span>
+          <button class="navbtn" onclick="shiftBills(1)"><i class="fa-solid fa-chevron-right text-[10px]"></i></button>
+        </div>
+      </div>
+      <div id="billsSummary" class="grid grid-cols-2 gap-2"></div>
+      <div id="billsList" class="space-y-2"></div>
+    </div>
+
     <div id="tabConfig" class="tab-pane hidden space-y-4">
       <h2 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-gear text-electric-400"></i> Configurações & Backup</h2>
       
@@ -296,6 +313,48 @@
     </div>
   </div>
 
+  <div id="billModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-dark-card border border-dark-border w-full max-w-xs rounded-2xl p-4 space-y-3 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <h3 id="billTitle" class="text-sm font-bold text-white"></h3>
+      <div class="space-y-2 text-xs">
+        <input type="text" id="billName" oninput="previewBill()" placeholder="Nome (ex: Copel, Condomínio)" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500">
+        <div id="billPreview"></div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="text-slate-400 block mb-1">Valor (R$)</label><input type="text" id="billAmount" inputmode="decimal" placeholder="0,00" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></div>
+          <div><label class="text-slate-400 block mb-1">Vence dia</label><input type="number" id="billDay" min="1" max="31" placeholder="Ex: 10" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></div>
+        </div>
+        <div><label class="text-slate-400 block mb-1">Tipo de valor</label>
+          <select id="billExact" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"><option value="exact">Valor exato (sempre igual)</option><option value="est">Estimativa (confirmo ao pagar)</option></select></div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="text-slate-400 block mb-1">Começa em</label><input type="month" id="billStart" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></div>
+          <div><label class="text-slate-400 block mb-1">Nº de parcelas</label><input type="number" id="billMonths" min="1" placeholder="todo mês" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></div>
+        </div>
+        <p class="text-[11px] text-slate-400">Parcelas: preencha só se a conta acaba (ex: entrada do apê em 36x). Em branco, ela se repete todo mês.</p>
+      </div>
+      <button id="billDeleteBtn" onclick="deleteBill()" class="hidden w-full bg-red-600/20 hover:bg-red-600 border border-red-500/40 text-red-300 hover:text-white py-2 rounded-xl text-xs font-semibold">Excluir conta</button>
+      <div class="flex gap-2">
+        <button onclick="closeBillModal()" class="flex-1 bg-dark-input text-slate-300 py-2 rounded-xl text-xs font-semibold">Cancelar</button>
+        <button onclick="saveBill()" class="flex-1 bg-electric-500 text-white py-2 rounded-xl text-xs font-semibold">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="billPayModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-dark-card border border-dark-border w-full max-w-xs rounded-2xl p-4 space-y-3 shadow-2xl">
+      <h3 id="billPayTitle" class="text-sm font-bold text-white"></h3>
+      <p id="billPayNote" class="text-[11px] text-slate-400"></p>
+      <div class="space-y-2 text-xs">
+        <div><label class="text-slate-400 block mb-1">Valor pago (R$)</label><input type="text" id="billPayAmount" inputmode="decimal" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></div>
+        <div><label class="text-slate-400 block mb-1">Saiu de qual conta?</label><select id="billPayBank" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"></select></div>
+        <div><label class="text-slate-400 block mb-1">Forma</label><select id="billPayMethod" class="w-full bg-dark-input border border-dark-border rounded-xl p-2 text-white outline-none focus:border-electric-500"><option value="PIX">Pix / boleto</option><option value="Débito">Débito</option></select></div>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="closeBillPay()" class="flex-1 bg-dark-input text-slate-300 py-2 rounded-xl text-xs font-semibold">Cancelar</button>
+        <button onclick="confirmBillPay()" class="flex-1 bg-electric-500 text-white py-2 rounded-xl text-xs font-semibold">Pagar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="goalModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-dark-card border border-dark-border w-full max-w-xs rounded-2xl p-4 space-y-3 shadow-2xl">
       <h3 id="goalTitle" class="text-sm font-bold text-white"></h3>
@@ -404,12 +463,25 @@
       <button onclick="switchTab('cartoes')" id="navCartoes" class="flex flex-col items-center gap-1"><i class="fa-solid fa-credit-card text-lg"></i><span class="text-[10px]">Faturas</span></button>
       <button onclick="$('moreSheet').classList.toggle('hidden')" id="navMais" class="flex flex-col items-center gap-1"><i class="fa-solid fa-ellipsis text-lg"></i><span class="text-[10px]">Mais</span></button>
       <div id="moreSheet" class="hidden absolute bottom-14 right-0 bg-dark-card border border-dark-border rounded-2xl p-2 shadow-2xl w-44 space-y-1">
+        <button onclick="switchTab('contas')" class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-200 hover:bg-dark-input"><i class="fa-solid fa-file-invoice-dollar w-4 text-electric-400"></i> Contas a pagar</button>
         <button onclick="switchTab('relatorios')" class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-200 hover:bg-dark-input"><i class="fa-solid fa-chart-pie w-4 text-electric-400"></i> Relatórios</button>
         <button onclick="switchTab('saldos')" class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-200 hover:bg-dark-input"><i class="fa-solid fa-wallet w-4 text-electric-400"></i> Saldos e caixinhas</button>
         <button onclick="switchTab('config')" class="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-200 hover:bg-dark-input"><i class="fa-solid fa-gear w-4 text-electric-400"></i> Ajustes</button>
       </div>
     </div>
   </nav>
+
+  <div id="onboarding" class="hidden fixed inset-0 z-[400] bg-dark-bg overflow-y-auto">
+    <div class="max-w-md mx-auto px-5 py-8 space-y-5">
+      <img src="joaquim-logo.png" alt="" class="w-16 h-16 rounded-full mx-auto">
+      <div class="text-center space-y-1">
+        <h2 id="obTitle" class="text-lg font-extrabold text-white"></h2>
+        <p id="obText" class="text-xs text-slate-400"></p>
+      </div>
+      <div id="obGrid" class="grid grid-cols-4 gap-x-2 gap-y-4"></div>
+      <button id="obDone" onclick="finishOnboarding()" class="w-full bg-dark-input border border-dark-border text-slate-200 py-2.5 rounded-xl text-xs font-semibold"></button>
+    </div>
+  </div>
 
   <div id="lockScreen" class="fixed inset-0 z-[500] bg-dark-bg flex flex-col items-center justify-center p-6">
     <img src="joaquim-logo.png" alt="Joaquim" id="lockLogo" class="w-28 h-28 rounded-full shadow-2xl shadow-electric-500/20">

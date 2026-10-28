@@ -98,12 +98,13 @@ const save = () => {
     localStorage.setItem('finances_recurring', JSON.stringify(recurring));
     localStorage.setItem('finances_paid', JSON.stringify(paidInvoices));
     localStorage.setItem('finances_goals', JSON.stringify(goals));
+    localStorage.setItem('finances_bills', JSON.stringify(bills));
     saveCategories();
   } catch (e) { toast('Não foi possível salvar os dados neste navegador.'); }
 };
 
 const refresh = () => { save(); renderAll(); };
-const renderAll = () => { renderExtrato(); renderCartoes(); renderSaldos(); renderRelatorios(); populateCategoryDropdowns(); renderRecurring(); renderForecast(); renderAlerts(); renderHome(); renderGoals(); renderSecurity(); fitChat(); };
+const renderAll = () => { renderExtrato(); renderCartoes(); renderSaldos(); renderRelatorios(); populateCategoryDropdowns(); renderRecurring(); renderForecast(); renderAlerts(); renderHome(); renderGoals(); renderSecurity(); renderBills(); fitChat(); };
 
 document.addEventListener('DOMContentLoaded', () => {
   startClock(); startLock(); generateRecurring(); switchTab('chat'); save(); renderAll();
@@ -141,6 +142,7 @@ function deleteCard() {
 function closeCardModal() {
   $('cardModal').classList.add('hidden');
   editingCardId = null; $('cardModalTitle').innerText = 'Adicionar Cartão'; $('cardDeleteBtn').classList.add('hidden');
+  if (onboardingActive) setTimeout(() => showOnboarding(cards.length > 0), 150);
   ['newCardName', 'newCardClosing', 'newCardDue', 'newCardBalance'].forEach(i => $(i).value = '');
 }
 
@@ -185,7 +187,7 @@ function switchTab(tab, dir = 0, plain = false) {
     if (tab === 'cartoes' && onExt) { animateCards(true); return; }
     if (tab === 'extrato' && onCards) { animateCards(false); return; }
   }
-  const tabs = ['chat', 'extrato', 'cartoes', 'relatorios', 'saldos', 'config'];
+  const tabs = ['chat', 'extrato', 'cartoes', 'contas', 'relatorios', 'saldos', 'config'];
   
   tabs.forEach((n) => {
     const el = $('tab' + n.charAt(0).toUpperCase() + n.slice(1));
@@ -211,11 +213,12 @@ function switchTab(tab, dir = 0, plain = false) {
     }
   });
 
-  const inMais = ['relatorios', 'saldos', 'config'].includes(tab);
+  const inMais = ['contas', 'relatorios', 'saldos', 'config'].includes(tab);
   $('navMais').className = 'flex flex-col items-center gap-1 transition-all duration-200 ' + (inMais ? 'text-electric-400 font-medium scale-105' : 'text-slate-400 hover:text-slate-200');
   $('moreSheet').classList.add('hidden');
   $('chatBar').classList.toggle('hidden', tab !== 'chat');
   if (tab === 'chat') { renderHome(); fitChat(); }
+  if (tab === 'contas') renderBills();
   if (tab === 'relatorios') renderRelatorios();
   if (tab === 'cartoes') renderCartoes();
   if (tab === 'extrato') renderExtrato();
@@ -612,7 +615,7 @@ function getBankCardStyle(cardName) {
 let cardsTransitioning = false;
 
 function setNavActive(tab) {
-  ['chat', 'extrato', 'cartoes', 'relatorios', 'saldos', 'config'].forEach(n => {
+  ['chat', 'extrato', 'cartoes', 'contas', 'relatorios', 'saldos', 'config'].forEach(n => {
     const btn = $('nav' + n.charAt(0).toUpperCase() + n.slice(1));
     if (btn) btn.className = 'flex flex-col items-center gap-1 transition-all duration-200 ' +
       (n === tab ? 'text-electric-400 font-medium scale-105' : 'text-slate-400 hover:text-slate-200');
@@ -1076,7 +1079,8 @@ function renderForecast() {
     const key = shiftKey(cur, i + 1);
     const fixed = transactions.filter(t => isExpense(t) && t.date.startsWith(key)).reduce((a, t) => a + t.cents, 0);
     const rec = recurring.filter(r => !r.generated.includes(key)).reduce((a, r) => a + r.cents, 0);
-    return { key, fixed, rec, total: fixed + rec };
+    const bl = billsExpected(key);
+    return { key, fixed, rec, bl, total: fixed + rec + bl };
   });
   const max = Math.max(1, ...rows.map(r => r.total));
   $('fcPrev').style.opacity = forecastPage === 0 ? '.3' : '1';
@@ -1085,6 +1089,7 @@ function renderForecast() {
     const parts = [];
     if (r.fixed) parts.push(`${brl(r.fixed)} em parcelas e lançamentos`);
     if (r.rec) parts.push(`${brl(r.rec)} em recorrentes`);
+    if (r.bl) parts.push(`${brl(r.bl)} em contas`);
     return `
     <div class="space-y-1">
       <div class="flex justify-between text-[11px]"><span class="text-white font-semibold">${monthLabel(r.key)}</span><span class="text-slate-400">${brl(r.total)}</span></div>
@@ -1111,7 +1116,7 @@ function renderAlerts() {
       if (days <= 3 && days >= -10) items.push({ card, key, total, days });
     });
   });
-  box.innerHTML = items.map(i => {
+  box.innerHTML = billAlertsHtml() + items.map(i => {
     const when = i.days < 0 ? `venceu há ${-i.days} dia${i.days === -1 ? '' : 's'}` : i.days === 0 ? 'vence hoje' : i.days === 1 ? 'vence amanhã' : `vence em ${i.days} dias`;
     const late = i.days < 0;
     return `<div class="flex items-center justify-between gap-2 ${late ? 'bg-red-500/15 border-red-500/40' : 'bg-yellow-500/10 border-yellow-500/30'} border rounded-2xl px-3 py-2 text-[11px]">
@@ -1168,7 +1173,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { ge
 
 // ---------- Trocar de aba arrastando para o lado ----------
 (() => {
-  const order = ['chat', 'extrato', 'cartoes', 'relatorios', 'saldos', 'config'];
+  const order = ['chat', 'extrato', 'cartoes', 'contas', 'relatorios', 'saldos', 'config'];
   let sx = 0, sy = 0, ok = false;
   document.addEventListener('touchstart', e => {
     const t = e.touches[0]; sx = t.clientX; sy = t.clientY;
@@ -1264,7 +1269,45 @@ const BRANDS = [
   ['s','booking','booking','booking.com','#003580','#fff','B'],
   ['s','latam','latam','latamairlines.com','#1B0088','#fff','L'],
   ['s','gol','\\bgol\\b','voegol.com.br','#FF7020','#fff','G'],
-  ['s','azul','\\bazul\\b','voeazul.com.br','#0033A0','#fff','A']
+  ['s','azul','\\bazul\\b','voeazul.com.br','#0033A0','#fff','A'],
+  // contas de casa: energia, água, gás, internet, seguros, saúde, impostos
+  ['s','copel','copel','copel.com','#0067B1','#fff','C'],
+  ['s','cemig','cemig','cemig.com.br','#006B3F','#FFD500','CE'],
+  ['s','enel','\\benel\\b','enel.com.br','#E4002B','#fff','E'],
+  ['s','cpfl','cpfl','cpfl.com.br','#E30613','#fff','CP'],
+  ['s','energisa','energisa','energisa.com.br','#0072BC','#fff','En'],
+  ['s','equatorial','equatorial','equatorialenergia.com.br','#00A859','#fff','Eq'],
+  ['s','celesc','celesc','celesc.com.br','#0072BC','#fff','CE'],
+  ['s','neoenergia','neoenergia','neoenergia.com','#0072CE','#fff','N'],
+  ['s','sanepar','sanepar','sanepar.com.br','#0072BC','#fff','SP'],
+  ['s','sabesp','sabesp','sabesp.com.br','#0033A0','#fff','SB'],
+  ['s','copasa','copasa','copasa.com.br','#0072BC','#fff','CP'],
+  ['s','cedae','cedae','cedae.com.br','#0072BC','#fff','CD'],
+  ['s','embasa','embasa','embasa.ba.gov.br','#0072BC','#fff','EM'],
+  ['s','casan','casan','casan.com.br','#0072BC','#fff','CA'],
+  ['s','compesa','compesa','servicos.compesa.com.br','#0072BC','#fff','CO'],
+  ['s','caesb','caesb','caesb.df.gov.br','#0072BC','#fff','CB'],
+  ['s','saneago','saneago','saneago.com.br','#0072BC','#fff','SA'],
+  ['s','compagas','compagas','compagas.com.br','#E30613','#fff','CG'],
+  ['s','comgas','comg[a]?s','comgas.com.br','#005EB8','#fff','CG'],
+  ['s','naturgy','naturgy','naturgy.com.br','#F58220','#fff','N'],
+  ['s','ultragaz','ultragaz','ultragaz.com.br','#E4002B','#fff','U'],
+  ['s','liquigas','liquigas','liquigas.com.br','#0033A0','#fff','L'],
+  ['s','oi','\\boi\\b','oi.com.br','#F5A800','#111','oi'],
+  ['s','sky','\\bsky\\b','sky.com.br','#E4002B','#fff','S'],
+  ['s','brisanet','brisanet','brisanet.com.br','#00A859','#fff','B'],
+  ['s','unimed','unimed','unimed.coop.br','#00995D','#fff','U'],
+  ['s','amil','\\bamil\\b','amil.com.br','#0033A0','#fff','A'],
+  ['s','hapvida','hapvida','hapvida.com.br','#E4002B','#fff','H'],
+  ['s','sulamerica','sul ?america','sulamerica.com.br','#F58220','#fff','S'],
+  ['s','portoseguro','porto seguro','portoseguro.com.br','#0033A0','#fff','PS'],
+  ['s','allianz','allianz','allianz.com.br','#003781','#fff','A'],
+  ['s','tokiomarine','tokio marine','tokiomarine.com.br','#00A859','#fff','TM'],
+  ['s','liberty','liberty seguros|\\bliberty\\b','libertyseguros.com.br','#FFD500','#111','L'],
+  ['s','hdi','\\bhdi\\b','hdiseguros.com.br','#00A859','#fff','HDI'],
+  ['s','mapfre','mapfre','mapfre.com.br','#E4002B','#fff','M'],
+  ['s','mei','\\bmei\\b|simples nacional|\\bdas mei\\b','gov.br','#1351B4','#fff','MEI'],
+  ['s','bluefit','bluefit','bluefit.com.br','#0066FF','#fff','BF']
 ].map(([kind, slug, re, dom, bg, fg, mono]) => ({ kind, slug, re: new RegExp(re), dom, bg, fg, mono }));
 
 const brandOf = (name, kind) => { const n = normTxt(name); return BRANDS.find(b => b.kind === kind && b.re.test(n)) || null; };
@@ -1420,7 +1463,7 @@ function pinShow(mode, msg) {
 }
 function pinHide() {
   const s = $('lockScreen');
-  s.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 350, fill: 'forwards' }).finished.then(() => s.classList.add('hidden'));
+  s.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 350, fill: 'forwards' }).finished.then(() => { s.classList.add('hidden'); maybeOnboard(); });
 }
 function pinKey(k) {
   if (k === '<') pinBuf = pinBuf.slice(0, -1); else if (pinBuf.length < 4) pinBuf += k;
@@ -1474,6 +1517,169 @@ window.addEventListener('resize', fitChat);
 window.addEventListener('orientationchange', fitChat);
 window.addEventListener('load', fitChat);
 
+// ---------- Primeiro uso: escolher os bancos/cartões ----------
+const ONBOARD_KEY = 'finances_onboarded';
+const OB_BANKS = [['nubank', 'Nubank'], ['c6', 'C6 Carbon'], ['inter', 'Inter'], ['mercadopago', 'Mercado Pago'], ['credicard', 'Credicard'], ['itau', 'Itaú'], ['bradesco', 'Bradesco'], ['santander', 'Santander'], ['bb', 'Banco do Brasil'], ['caixa', 'Caixa'], ['picpay', 'PicPay'], ['', 'Outro']];
+let onboardingActive = false;
+
+function maybeOnboard() { if (!cards.length && !localStorage.getItem(ONBOARD_KEY)) showOnboarding(false); }
+
+function showOnboarding(more) {
+  onboardingActive = true;
+  $('obTitle').innerText = more ? 'Quer cadastrar mais algum?' : 'Vamos começar? 👋';
+  $('obText').innerText = more ? 'Toque em outro banco ou cartão, ou conclua.' : 'Toque no seu banco ou cartão para cadastrar. Dá para adicionar quantos quiser.';
+  $('obDone').innerText = more ? 'Concluir' : 'Pular por agora';
+  $('obGrid').innerHTML = OB_BANKS.map(([slug, label]) => {
+    const b = slug ? BRANDS.find(x => x.slug === slug) : { slug: '', dom: '', bg: '#26262e', fg: '#cbd5e1', mono: '+' };
+    return `<button onclick="pickBank('${slug}')" class="flex flex-col items-center gap-1.5 text-[11px] text-slate-300 active:scale-95 transition-all">${brandAvatar(b, 56, '16px')}<span class="text-center leading-tight">${label}</span></button>`;
+  }).join('');
+  $('onboarding').classList.remove('hidden');
+}
+
+function pickBank(slug) {
+  const item = OB_BANKS.find(x => x[0] === slug);
+  $('onboarding').classList.add('hidden');
+  openCardModal();
+  if (slug) { $('newCardName').value = item[1]; previewCard(); }
+}
+
+function finishOnboarding() {
+  localStorage.setItem(ONBOARD_KEY, '1');
+  onboardingActive = false;
+  $('onboarding').classList.add('hidden');
+  if (cards.length) toast('Tudo pronto! Lance seu primeiro gasto no chat.');
+}
+
+// ---------- Contas a pagar (luz, água, condomínio, parcelas...) ----------
+let bills = loadJSON('finances_bills', []);
+let billsOffset = 0, billEditing = null, billPaying = null;
+const monthDiff = (a, b) => { const [y1, m1] = a.split('-').map(Number), [y2, m2] = b.split('-').map(Number); return (y2 - y1) * 12 + (m2 - m1); };
+const billActive = (b, key) => { const d = monthDiff(b.startKey, key); return d >= 0 && (!b.months || d < b.months); };
+const billDue = (b, key) => { const [y, m] = key.split('-').map(Number); return new Date(y, m - 1, Math.min(b.day, new Date(y, m, 0).getDate())); };
+// "paga" só vale se o lançamento ainda existe no Extrato
+const billPayment = (b, key) => { const p = b.paid && b.paid[key]; return p && transactions.some(t => t.id === p.txId) ? p : null; };
+const billsExpected = key => bills.filter(b => billActive(b, key) && !billPayment(b, key)).reduce((a, b) => a + b.cents, 0);
+const fmtInput = c => (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+const daysUntil = d => { const t = new Date(); t.setHours(0, 0, 0, 0); return Math.round((d - t) / 86400000); };
+function dueText(days) {
+  return days < 0 ? `atrasada há ${-days} dia${days === -1 ? '' : 's'}` : days === 0 ? 'vence hoje' : days === 1 ? 'vence amanhã' : `vence em ${days} dias`;
+}
+
+function shiftBills(n) { billsOffset += n; renderBills(); }
+
+function renderBills() {
+  const el = $('billsList'); if (!el) return;
+  const key = shiftKey(monthKey(new Date()), billsOffset);
+  $('billsMonth').innerText = monthLabel(key);
+  const rows = bills.filter(b => billActive(b, key)).map(b => ({ b, due: billDue(b, key), p: billPayment(b, key) })).sort((x, y) => x.due - y.due);
+  const toPay = rows.filter(r => !r.p).reduce((a, r) => a + r.b.cents, 0);
+  const paid = rows.filter(r => r.p).reduce((a, r) => a + r.p.cents, 0);
+  const card = (t, v, c) => `<div class="bg-dark-card border border-dark-border rounded-2xl p-3"><span class="block text-[10px] text-slate-400 uppercase font-bold">${t}</span><span class="text-base font-extrabold ${c}">${brl(v)}</span></div>`;
+  $('billsSummary').innerHTML = card('A pagar (previsto)', toPay, 'text-white') + card('Já pago', paid, 'text-emerald-400');
+  el.innerHTML = !rows.length
+    ? `<div class="text-center space-y-2 py-8"><img src="joaquim-logo.png" alt="" class="w-14 h-14 rounded-full mx-auto"><p class="text-xs text-slate-400">Nenhuma conta neste mês. Cadastre luz, água, condomínio e as parcelas que você paga todo mês.</p></div>`
+    : rows.map(({ b, due, p }) => {
+      const days = daysUntil(due);
+      const stat = p ? `<span class="text-emerald-400">✓ pago ${fmtDate(isoDate(new Date(p.date || due)))}</span>`
+        : `<span class="${days < 0 ? 'text-red-400' : days <= 3 ? 'text-yellow-400' : 'text-slate-400'}">${dueText(days)} (dia ${due.getDate()})</span>`;
+      const parc = b.months ? ` • parcela ${monthDiff(b.startKey, key) + 1}/${b.months}` : '';
+      const val = p ? brl(p.cents) : (b.exact ? '' : '≈ ') + brl(b.cents);
+      const brand = brandOf(b.name, 's');
+      const av = brand ? brandAvatar(brand, 38, '12px') : `<div class="w-[38px] h-[38px] rounded-xl bg-electric-500/10 border border-electric-500/30 flex items-center justify-center text-electric-400 shrink-0"><i class="fa-solid fa-file-invoice-dollar"></i></div>`;
+      return `<div class="bg-dark-card border border-dark-border rounded-2xl p-3 space-y-2">
+        <div class="flex items-center gap-3">${av}
+          <div class="flex-1 min-w-0"><span class="block text-xs font-bold text-white truncate">${esc(b.name)}${parc}</span><span class="text-[11px]">${stat}${!p && !b.exact ? ' <span class="text-slate-500">• estimativa</span>' : ''}</span></div>
+          <span class="text-sm font-extrabold ${p ? 'text-emerald-400' : 'text-white'}">${val}</span></div>
+        <div class="flex gap-2">
+          ${p ? `<button onclick="undoBillPay('${b.id}','${key}')" class="flex-1 bg-dark-input border border-dark-border text-slate-300 py-1.5 rounded-xl text-[11px] font-semibold">Desfazer pagamento</button>`
+            : `<button onclick="openBillPay('${b.id}','${key}')" class="flex-1 bg-electric-500 text-white py-1.5 rounded-xl text-[11px] font-semibold">Pagar</button>`}
+          <button onclick="openBillModal('${b.id}')" class="px-3 bg-dark-input border border-dark-border text-slate-300 rounded-xl text-[11px]"><i class="fa-solid fa-pen"></i></button>
+        </div></div>`;
+    }).join('');
+}
+
+function openBillModal(id) {
+  const b = id ? bills.find(x => x.id === id) : null;
+  billEditing = b ? b.id : null;
+  $('billTitle').innerText = b ? 'Editar conta' : 'Nova conta';
+  $('billName').value = b ? b.name : '';
+  $('billAmount').value = b ? fmtInput(b.cents) : '';
+  $('billExact').value = b && b.exact ? 'exact' : (b ? 'est' : 'est');
+  $('billDay').value = b ? b.day : '';
+  $('billMonths').value = b && b.months ? b.months : '';
+  $('billStart').value = b ? b.startKey : monthKey(new Date());
+  $('billDeleteBtn').classList.toggle('hidden', !b);
+  previewBill();
+  $('billModal').classList.remove('hidden');
+}
+function previewBill() {
+  const n = $('billName').value.trim(), b = n && brandOf(n, 's'), el = $('billPreview');
+  if (el) el.innerHTML = b ? `<div class="flex items-center gap-2 text-[11px] text-slate-300">${brandAvatar(b, 28, '8px')} Logo encontrado</div>` : '';
+}
+function closeBillModal() { $('billModal').classList.add('hidden'); billEditing = null; }
+function saveBill() {
+  const name = $('billName').value.trim(), cents = parseMoney($('billAmount').value.trim()), day = parseInt($('billDay').value);
+  if (!name || !cents || !(day >= 1 && day <= 31)) { toast('Informe nome, valor e dia do vencimento (1 a 31).'); return; }
+  const data = { name, cents, day, exact: $('billExact').value === 'exact', months: parseInt($('billMonths').value) || null, startKey: $('billStart').value || monthKey(new Date()), category: 'Contas' };
+  if (billEditing) Object.assign(bills.find(x => x.id === billEditing), data);
+  else bills.push({ id: uid(), paid: {}, ...data });
+  refresh(); closeBillModal();
+}
+function deleteBill() {
+  const b = bills.find(x => x.id === billEditing); if (!b) return;
+  if (!confirm(`Excluir a conta "${b.name}"? Os pagamentos já feitos continuam no Extrato.`)) return;
+  bills = bills.filter(x => x.id !== b.id);
+  refresh(); closeBillModal();
+}
+
+function openBillPay(id, key) {
+  const b = bills.find(x => x.id === id); if (!b) return;
+  if (!cards.length) { toast('Cadastre uma conta ou cartão primeiro (aba Faturas).'); return; }
+  billPaying = { id, key };
+  $('billPayTitle').innerText = `${b.name} — ${monthLabel(key)}`;
+  $('billPayNote').innerText = b.exact ? 'Valor fixo. Confirme e pague.' : 'Valor estimado: digite o valor correto da conta.';
+  $('billPayAmount').value = fmtInput(b.cents);
+  $('billPayBank').innerHTML = cards.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  if (b.lastCardId && cards.some(c => c.id === b.lastCardId)) $('billPayBank').value = b.lastCardId;
+  $('billPayModal').classList.remove('hidden');
+}
+function closeBillPay() { $('billPayModal').classList.add('hidden'); billPaying = null; }
+function confirmBillPay() {
+  const b = billPaying && bills.find(x => x.id === billPaying.id);
+  const cents = parseMoney($('billPayAmount').value.trim()), cardId = $('billPayBank').value;
+  if (!b || !cents || !cardId) { toast('Informe o valor pago.'); return; }
+  const id = Date.now() + Math.floor(Math.random() * 1e6);
+  transactions.unshift({ id, groupId: id, total: 1, idx: 1, name: b.name, cents, category: 'Contas', method: $('billPayMethod').value, cardId, date: isoDate(new Date()), billId: b.id });
+  b.paid = b.paid || {};
+  b.paid[billPaying.key] = { cents, txId: id, cardId, date: isoDate(new Date()) };
+  b.lastCardId = cardId;
+  if (!b.exact) b.cents = cents; // a estimativa dos próximos meses passa a ser o último valor real
+  if (!customCategories.includes('Contas')) customCategories.push('Contas');
+  closeBillPay(); refresh(); toast('Conta paga!');
+}
+function undoBillPay(id, key) {
+  const b = bills.find(x => x.id === id), p = b && b.paid && b.paid[key];
+  if (!p) return;
+  transactions = transactions.filter(t => t.id !== p.txId);
+  delete b.paid[key];
+  refresh();
+}
+
+function billAlertsHtml() {
+  let out = '';
+  const cur = monthKey(new Date());
+  bills.forEach(b => [shiftKey(cur, -1), cur].forEach(key => {
+    if (!billActive(b, key) || billPayment(b, key)) return;
+    const days = daysUntil(billDue(b, key));
+    if (days > 3 || days < -10) return;
+    const late = days < 0;
+    out += `<div class="flex items-center justify-between gap-2 ${late ? 'bg-red-500/15 border-red-500/40' : 'bg-yellow-500/10 border-yellow-500/30'} border rounded-2xl px-3 py-2 text-[11px]">
+      <span class="text-white"><i class="fa-solid fa-bell ${late ? 'text-red-400' : 'text-yellow-400'}"></i> Conta <b>${esc(b.name)}</b> ${dueText(days)}: <b>${b.exact ? '' : '≈ '}${brl(b.cents)}</b></span>
+      <button onclick="openBillPay('${b.id}','${key}')" class="shrink-0 bg-dark-input border border-dark-border text-slate-200 px-2 py-0.5 rounded-lg font-semibold">Pagar</button></div>`;
+  }));
+  return out;
+}
+
 // ---------- App instalável (PWA) ----------
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(() => {});
 
@@ -1487,7 +1693,8 @@ function exportBackup() {
     categoryMetas,
     customCategories,
     recurring,
-    goals
+    goals,
+    bills
   };
   const jsonStr = JSON.stringify(data, null, 2);
   const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -1531,6 +1738,7 @@ function importBackup(event) {
         if (data.customCategories) customCategories = data.customCategories;
         if (Array.isArray(data.recurring)) recurring = data.recurring;
         if (Array.isArray(data.goals)) goals = data.goals;
+        if (Array.isArray(data.bills)) bills = data.bills;
         refresh();
         toast('Backup restaurado com sucesso!');
         event.target.value = '';
