@@ -1125,49 +1125,7 @@ function renderAlerts() {
   }).join('');
 }
 
-function markPaid(cardId, key) {
-  const cardPaid = cards.find(c => c.id === cardId);
-  if (!cardPaid) return;
-
-  const total = transactions
-    .filter(t => t.cardId === cardId && t.method === 'Crédito' && invoiceKeyOf(parseIso(t.date), cardPaid) === key)
-    .reduce((a, t) => a + t.cents, 0);
-
-  if (total <= 0) {
-    paidInvoices.push(cardId + '|' + key);
-    save();
-    renderAlerts();
-    return;
-  }
-
-  const cardOptions = cards.map(c => `• ${c.name}`).join('\n');
-  const chosenName = cards.length === 1 ? cardPaid.name : prompt(
-    `A fatura do ${cardPaid.name} (${monthLabel(key)}) no valor de ${brl(total)} foi paga por qual conta?\n\nDigite o nome de uma das suas contas:\n${cardOptions}`,
-    cardPaid.name
-  );
-
-  if (!chosenName) return;
-
-  const sourceAccount = cards.find(c => normTxt(c.name) === normTxt(chosenName.trim())) || cardPaid;
-
-  const paymentId = Date.now();
-  transactions.unshift({
-    id: paymentId,
-    groupId: paymentId,
-    total: 1,
-    idx: 1,
-    name: `Pagamento Fatura ${cardPaid.name} (${monthLabel(key)})`,
-    cents: total,
-    category: 'Pagamento de Fatura',
-    method: 'Débito',
-    cardId: sourceAccount.id,
-    date: isoDate(new Date())
-  });
-
-  paidInvoices.push(cardId + '|' + key);
-  refresh();
-  toast(`Pagamento de ${brl(total)} registrado com sucesso! O valor foi descontado da conta ${sourceAccount.name}.`);
-}
+function markPaid(cardId, key) { openInvoicePay(cardId, key); }
 
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { generateRecurring(); renderAll(); } });
 
@@ -1578,28 +1536,94 @@ function dueText(days) {
 
 function shiftBills(n) { billsOffset += n; renderBills(); }
 
+// ---------- Faturas dentro de "Contas a pagar" ----------
+const invoiceTotal = (card, ik) => transactions.filter(t => t.cardId === card.id && t.method === 'Crédito' && invoiceKeyOf(parseIso(t.date), card) === ik).reduce((a, t) => a + t.cents, 0);
+
+// faturas que vencem no mês `key` (o vencimento pode cair no mesmo mês do fechamento ou no seguinte)
+function invoiceRows(key) {
+  const [y, m] = key.split('-').map(Number);
+  return creditCards().map(card => {
+    const ik = card.dueDay > card.closingDay ? key : shiftKey(key, -1);
+    const pk = card.id + '|' + ik;
+    const total = invoiceTotal(card, ik);
+    const payTx = transactions.find(t => t.invKey === pk);
+    return { inv: true, card, ik, total, paid: paidInvoices.includes(pk), paidCents: payTx ? payTx.cents : total,
+      open: ik >= openInvoiceKey(card), due: new Date(y, m - 1, Math.min(card.dueDay, new Date(y, m, 0).getDate())) };
+  }).filter(r => r.total > 0);
+}
+
+function openInvoicePay(cardId, key) {
+  const card = cards.find(c => c.id === cardId); if (!card) return;
+  const total = invoiceTotal(card, key);
+  if (total <= 0) { paidInvoices.push(cardId + '|' + key); save(); renderAll(); return; }
+  billPaying = { inv: true, cardId, key };
+  $('billPayTitle').innerText = `Fatura ${card.name} — ${monthLabel(key)}`;
+  $('billPayNote').innerText = 'Confira o valor e escolha de qual conta saiu o pagamento.';
+  $('billPayAmount').value = fmtInput(total);
+  $('billPayBank').innerHTML = cards.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  $('billPayBank').value = card.id;
+  $('billPayMethod').value = 'Débito';
+  $('billPayModal').classList.remove('hidden');
+}
+function confirmInvoicePay() {
+  const { cardId, key } = billPaying;
+  const card = cards.find(c => c.id === cardId), src = cards.find(c => c.id === $('billPayBank').value);
+  const cents = parseMoney($('billPayAmount').value.trim());
+  if (!card || !src || !cents) { toast('Informe o valor pago.'); return; }
+  const id = Date.now();
+  transactions.unshift({ id, groupId: id, total: 1, idx: 1, name: `Pagamento Fatura ${card.name} (${monthLabel(key)})`, cents, category: 'Pagamento de Fatura', method: $('billPayMethod').value, cardId: src.id, date: isoDate(new Date()), invKey: cardId + '|' + key });
+  paidInvoices.push(cardId + '|' + key);
+  closeBillPay(); refresh();
+  toast(`Fatura paga! ${brl(cents)} saiu de ${src.name}.`);
+}
+function undoInvoicePay(cardId, key) {
+  const pk = cardId + '|' + key;
+  transactions = transactions.filter(t => t.invKey !== pk);
+  paidInvoices = paidInvoices.filter(x => x !== pk);
+  refresh();
+}
+
 function renderBills() {
   const el = $('billsList'); if (!el) return;
   const key = shiftKey(monthKey(new Date()), billsOffset);
   $('billsMonth').innerText = monthLabel(key);
-  const rows = bills.filter(b => billActive(b, key)).map(b => ({ b, due: billDue(b, key), p: billPayment(b, key) })).sort((x, y) => x.due - y.due);
-  const toPay = rows.filter(r => !r.p).reduce((a, r) => a + r.b.cents, 0);
-  const paid = rows.filter(r => r.p).reduce((a, r) => a + r.p.cents, 0);
-  const card = (t, v, c) => `<div class="bg-dark-card border border-dark-border rounded-2xl p-3"><span class="block text-[10px] text-slate-400 uppercase font-bold">${t}</span><span class="text-base font-extrabold ${c}">${brl(v)}</span></div>`;
-  $('billsSummary').innerHTML = card('A pagar (previsto)', toPay, 'text-white') + card('Já pago', paid, 'text-emerald-400');
-  el.innerHTML = !rows.length
-    ? `<div class="text-center space-y-2 py-8"><img src="joaquim-logo.png" alt="" class="w-14 h-14 rounded-full mx-auto"><p class="text-xs text-slate-400">Nenhuma conta neste mês. Cadastre luz, água, condomínio e as parcelas que você paga todo mês.</p></div>`
-    : rows.map(({ b, due, p }) => {
-      const days = daysUntil(due);
-      const stat = p ? `<span class="text-emerald-400">✓ pago ${fmtDate(isoDate(new Date(p.date || due)))}</span>`
-        : `<span class="${days < 0 ? 'text-red-400' : days <= 3 ? 'text-yellow-400' : 'text-slate-400'}">${dueText(days)} (dia ${due.getDate()})</span>`;
+  const billRows = bills.filter(b => billActive(b, key)).map(b => ({ b, due: billDue(b, key), p: billPayment(b, key) }));
+  const invRows = invoiceRows(key);
+  const all = [...billRows, ...invRows].sort((x, y) => x.due - y.due);
+  const billTotal = billRows.reduce((a, r) => a + (r.p ? r.p.cents : r.b.cents), 0);
+  const invTotal = invRows.reduce((a, r) => a + r.total, 0);
+  const toPay = billRows.filter(r => !r.p).reduce((a, r) => a + r.b.cents, 0) + invRows.filter(r => !r.paid).reduce((a, r) => a + r.total, 0);
+  const paid = billRows.filter(r => r.p).reduce((a, r) => a + r.p.cents, 0) + invRows.filter(r => r.paid).reduce((a, r) => a + r.paidCents, 0);
+  const box = (t, v, c) => `<div class="bg-dark-card border border-dark-border rounded-2xl p-3"><span class="block text-[10px] text-slate-400 uppercase font-bold">${t}</span><span class="text-base font-extrabold ${c}">${brl(v)}</span></div>`;
+  $('billsSummary').innerHTML = box('Falta pagar', toPay, 'text-white') + box('Já pago', paid, 'text-emerald-400')
+    + `<div class="col-span-2 bg-dark-card border border-dark-border rounded-2xl px-3 py-2 flex justify-between items-center text-[11px]"><span class="text-slate-400">Total do mês <b class="text-white">${brl(billTotal + invTotal)}</b></span><span class="text-slate-400">Contas ${brl(billTotal)} • Faturas ${brl(invTotal)}</span></div>`;
+  const stat = (done, days, due, doneDate) => done
+    ? `<span class="text-emerald-400">✓ pago${doneDate ? ' ' + fmtDate(doneDate) : ''}</span>`
+    : `<span class="${days < 0 ? 'text-red-400' : days <= 3 ? 'text-yellow-400' : 'text-slate-400'}">${dueText(days)} (dia ${due.getDate()})</span>`;
+  el.innerHTML = !all.length
+    ? `<div class="text-center space-y-2 py-8"><img src="joaquim-logo.png" alt="" class="w-14 h-14 rounded-full mx-auto"><p class="text-xs text-slate-400">Nada a pagar neste mês. Cadastre luz, água, condomínio e as parcelas; as faturas dos cartões aparecem aqui sozinhas.</p></div>`
+    : all.map(r => {
+      const days = daysUntil(r.due);
+      if (r.inv) {
+        const c = r.card;
+        return `<div class="bg-dark-card border border-dark-border rounded-2xl p-3 space-y-2">
+          <div class="flex items-center gap-3">${brandAvatar(bankBrand(c.name), 38, '12px')}
+            <div class="flex-1 min-w-0"><span class="block text-xs font-bold text-white truncate">Fatura ${esc(c.name)}</span><span class="text-[11px]">${stat(r.paid, days, r.due)}${!r.paid && r.open ? ' <span class="text-slate-500">• em aberto, fecha dia ' + c.closingDay + '</span>' : ''}</span></div>
+            <span class="text-sm font-extrabold ${r.paid ? 'text-emerald-400' : 'text-white'}">${!r.paid && r.open ? '≈ ' : ''}${brl(r.paid ? r.paidCents : r.total)}</span></div>
+          <div class="flex gap-2">
+            ${r.paid ? `<button onclick="undoInvoicePay('${c.id}','${r.ik}')" class="flex-1 bg-dark-input border border-dark-border text-slate-300 py-1.5 rounded-xl text-[11px] font-semibold">Desfazer pagamento</button>`
+              : `<button onclick="openInvoicePay('${c.id}','${r.ik}')" class="flex-1 bg-electric-500 text-white py-1.5 rounded-xl text-[11px] font-semibold">Pagar fatura</button>`}
+            <button onclick="expandedCardId='${c.id}'; switchTab('cartoes')" class="px-3 bg-dark-input border border-dark-border text-slate-300 rounded-xl text-[11px]">Ver compras</button>
+          </div></div>`;
+      }
+      const { b, due, p } = r;
       const parc = b.months ? ` • parcela ${monthDiff(billFirst(b), key) + 1}/${b.months}` : '';
       const val = p ? brl(p.cents) : (b.exact ? '' : '≈ ') + brl(b.cents);
       const brand = brandAny(b.name);
       const av = brand ? brandAvatar(brand, 38, '12px') : `<div class="w-[38px] h-[38px] rounded-xl bg-electric-500/10 border border-electric-500/30 flex items-center justify-center text-electric-400 shrink-0"><i class="fa-solid fa-file-invoice-dollar"></i></div>`;
       return `<div class="bg-dark-card border border-dark-border rounded-2xl p-3 space-y-2">
         <div class="flex items-center gap-3">${av}
-          <div class="flex-1 min-w-0"><span class="block text-xs font-bold text-white truncate">${esc(b.name)}${parc}</span><span class="text-[11px]">${stat}${!p && !b.exact ? ' <span class="text-slate-500">• estimativa</span>' : ''}</span></div>
+          <div class="flex-1 min-w-0"><span class="block text-xs font-bold text-white truncate">${esc(b.name)}${parc}</span><span class="text-[11px]">${stat(!!p, days, due, p && p.date)}${!p && !b.exact ? ' <span class="text-slate-500">• estimativa</span>' : ''}</span></div>
           <span class="text-sm font-extrabold ${p ? 'text-emerald-400' : 'text-white'}">${val}</span></div>
         <div class="flex gap-2">
           ${p ? `<button onclick="undoBillPay('${b.id}','${key}')" class="flex-1 bg-dark-input border border-dark-border text-slate-300 py-1.5 rounded-xl text-[11px] font-semibold">Desfazer pagamento</button>`
@@ -1657,6 +1681,7 @@ function openBillPay(id, key) {
 }
 function closeBillPay() { $('billPayModal').classList.add('hidden'); billPaying = null; }
 function confirmBillPay() {
+  if (billPaying && billPaying.inv) { confirmInvoicePay(); return; }
   const b = billPaying && bills.find(x => x.id === billPaying.id);
   const cents = parseMoney($('billPayAmount').value.trim()), cardId = $('billPayBank').value;
   if (!b || !cents || !cardId) { toast('Informe o valor pago.'); return; }
