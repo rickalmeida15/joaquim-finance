@@ -213,7 +213,7 @@ function switchTab(tab, dir = 0, plain = false) {
     }
   });
 
-  const inMais = ['contas', 'relatorios', 'saldos', 'config'].includes(tab);
+  const inMais = ['relatorios', 'saldos', 'config'].includes(tab);
   $('navMais').className = 'flex flex-col items-center gap-1 transition-all duration-200 ' + (inMais ? 'text-electric-400 font-medium scale-105' : 'text-slate-400 hover:text-slate-200');
   $('moreSheet').classList.add('hidden');
   $('chatBar').classList.toggle('hidden', tab !== 'chat');
