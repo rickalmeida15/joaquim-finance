@@ -207,7 +207,8 @@
       
       <div class="bg-dark-card border border-dark-border p-4 rounded-2xl space-y-3 shadow-md">
         <h3 class="text-xs font-bold text-white flex items-center gap-2"><i class="fa-solid fa-database text-electric-400"></i> Cópia de Segurança (Backup)</h3>
-        <p class="text-[11px] text-slate-400 leading-relaxed">Exporte seus dados para não perder ao mudar de navegador ou celular.</p>
+        <p class="text-[11px] text-slate-400 leading-relaxed">Baixe um arquivo com todos os seus dados. Se limpar o navegador, trocar de celular ou o app abrir vazio, use "Restaurar Backup" e tudo volta.</p>
+        <p id="backupInfo" class="text-[11px] font-semibold text-electric-400"></p>
         <div class="grid grid-cols-2 gap-2 pt-1">
           <button onclick="exportBackup()" class="bg-electric-500 hover:bg-electric-600 text-white p-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all">
             <i class="fa-solid fa-download"></i> Baixar Backup
@@ -481,6 +482,7 @@
         <p id="obText" class="text-xs text-slate-400"></p>
       </div>
       <div id="obGrid" class="grid grid-cols-4 gap-x-2 gap-y-4"></div>
+      <button onclick="$('importFileInput').click()" class="w-full bg-electric-500/15 border border-electric-500/30 text-electric-400 py-2.5 rounded-xl text-xs font-semibold"><i class="fa-solid fa-upload"></i> Já tenho um backup: restaurar meus dados</button>
       <button id="obDone" onclick="finishOnboarding()" class="w-full bg-dark-input border border-dark-border text-slate-200 py-2.5 rounded-xl text-xs font-semibold"></button>
     </div>
   </div>

@@ -104,7 +104,7 @@ const save = () => {
 };
 
 const refresh = () => { save(); renderAll(); };
-const renderAll = () => { renderExtrato(); renderCartoes(); renderSaldos(); renderRelatorios(); populateCategoryDropdowns(); renderRecurring(); renderForecast(); renderAlerts(); renderHome(); renderGoals(); renderSecurity(); renderBills(); fitChat(); };
+const renderAll = () => { renderExtrato(); renderCartoes(); renderSaldos(); renderRelatorios(); populateCategoryDropdowns(); renderRecurring(); renderForecast(); renderAlerts(); renderHome(); renderGoals(); renderSecurity(); renderBills(); renderBackupInfo(); fitChat(); };
 
 document.addEventListener('DOMContentLoaded', () => {
   startClock(); startLock(); generateRecurring(); switchTab('chat'); save(); renderAll();
@@ -1116,7 +1116,7 @@ function renderAlerts() {
       if (days <= 3 && days >= -10) items.push({ card, key, total, days });
     });
   });
-  box.innerHTML = billAlertsHtml() + items.map(i => {
+  box.innerHTML = backupAlertHtml() + billAlertsHtml() + items.map(i => {
     const when = i.days < 0 ? `venceu há ${-i.days} dia${i.days === -1 ? '' : 's'}` : i.days === 0 ? 'vence hoje' : i.days === 1 ? 'vence amanhã' : `vence em ${i.days} dias`;
     const late = i.days < 0;
     return `<div class="flex items-center justify-between gap-2 ${late ? 'bg-red-500/15 border-red-500/40' : 'bg-yellow-500/10 border-yellow-500/30'} border rounded-2xl px-3 py-2 text-[11px]">
@@ -1731,7 +1731,8 @@ function exportBackup() {
     customCategories,
     recurring,
     goals,
-    bills
+    bills,
+    paidInvoices
   };
   const jsonStr = JSON.stringify(data, null, 2);
   const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -1741,6 +1742,29 @@ function exportBackup() {
   a.download = `joaquim_finance_backup_${isoDate(new Date())}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  localStorage.setItem(BACKUP_KEY, isoDate(new Date()));
+  renderBackupInfo(); renderAlerts();
+  toast('Backup baixado! Guarde o arquivo em um lugar seguro (Drive, WhatsApp, e-mail).');
+}
+
+const BACKUP_KEY = 'finances_last_backup';
+function renderBackupInfo() {
+  const el = $('backupInfo'); if (!el) return;
+  const last = localStorage.getItem(BACKUP_KEY);
+  el.innerText = last ? `Último backup: ${fmtDate(last)}` : 'Você ainda não fez nenhum backup.';
+}
+// Lembrete: quem já tem lançamentos e está há 15 dias sem backup (ou nunca fez, depois de 3 dias de uso)
+function backupAlertHtml() {
+  if (!transactions.length) return '';
+  const last = localStorage.getItem(BACKUP_KEY);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const first = transactions.reduce((m, t) => t.date < m ? t.date : m, transactions[0].date);
+  const ref = last || first;
+  const days = Math.round((today - parseIso(ref)) / 86400000);
+  if (last ? days < 15 : days < 3) return '';
+  return `<div class="flex items-center justify-between gap-2 bg-yellow-500/10 border border-yellow-500/30 border rounded-2xl px-3 py-2 text-[11px]">
+    <span class="text-white"><i class="fa-solid fa-database text-yellow-400"></i> ${last ? `Faz ${days} dias que você não faz backup.` : 'Você ainda não fez backup dos seus dados.'}</span>
+    <button onclick="exportBackup()" class="shrink-0 bg-dark-input border border-dark-border text-slate-200 px-2 py-0.5 rounded-lg font-semibold">Fazer agora</button></div>`;
 }
 
 function exportCSV() {
@@ -1767,7 +1791,7 @@ function importBackup(event) {
     try {
       const data = JSON.parse(e.target.result);
       if (data.transactions && data.cards) {
-        if (!confirm('Isso substitui os dados atuais pelos do backup. Continuar?')) { event.target.value = ''; return; }
+        if ((transactions.length || cards.length) && !confirm('Isso substitui os dados atuais pelos do backup. Continuar?')) { event.target.value = ''; return; }
         transactions = data.transactions.map(migrate);
         cards = data.cards;
         cards.forEach(c => { if (typeof c.balance !== 'number') c.balance = 0; });
@@ -1776,14 +1800,17 @@ function importBackup(event) {
         if (Array.isArray(data.recurring)) recurring = data.recurring;
         if (Array.isArray(data.goals)) goals = data.goals;
         if (Array.isArray(data.bills)) bills = data.bills;
+        if (Array.isArray(data.paidInvoices)) paidInvoices = data.paidInvoices;
+        localStorage.setItem(ONBOARD_KEY, '1'); onboardingActive = false; $('onboarding').classList.add('hidden');
+        localStorage.setItem(BACKUP_KEY, (data.exportDate || isoDate(new Date())).slice(0, 10));
         refresh();
         toast('Backup restaurado com sucesso!');
         event.target.value = '';
       } else {
-        toast('Ficheiro de backup inválido.');
+        toast('Esse arquivo não parece ser um backup do Joaquim.');
       }
     } catch (err) {
-      toast('Erro ao ler o ficheiro de backup.');
+      toast('Não consegui ler o arquivo de backup.');
     }
   };
   reader.readAsText(file);
